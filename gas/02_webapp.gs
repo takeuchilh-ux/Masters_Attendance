@@ -132,8 +132,8 @@ function getShiftMaster() {
   return sheetToObjects('シフトマスタ').map(r => ({
     id:    r['シフトID'],
     label: r['名称'],
-    start: r['開始時刻'],
-    end:   r['終了時刻'],
+    start: formatTime(r['開始時刻']),
+    end:   formatTime(r['終了時刻']),
     break: Number(r['休憩(分)']) || 0,
     color: r['カラー'],
   }));
@@ -201,7 +201,7 @@ function getShiftData(tenantId, month) {
     date:      formatDate(r['日付']),
     typeId:    r['シフト種別ID'],
     override:  (r['開始時刻(上書)'] || r['終了時刻(上書)'])
-               ? { start: r['開始時刻(上書)'], end: r['終了時刻(上書)'] }
+               ? { start: formatTime(r['開始時刻(上書)']), end: formatTime(r['終了時刻(上書)']) }
                : null,
   }));
   let filtered = all;
@@ -423,6 +423,15 @@ function deleteShift(staffId, date) {
 // ============================================================
 // ユーティリティ
 // ============================================================
+function formatTime(val) {
+  if (!val) return '';
+  if (val instanceof Date) {
+    return Utilities.formatDate(val, Session.getScriptTimeZone(), 'HH:mm');
+  }
+  const s = String(val);
+  return s.length > 5 ? s.slice(0, 5) : s; // 念のためHH:MMに切り詰め
+}
+
 function formatDate(val) {
   if (!val) return '';
   if (val instanceof Date) {

@@ -3,6 +3,20 @@
 // ============================================================
 const { useState: useStateS, useMemo: useMemoS, useContext: useContextS, useEffect: useEffectS } = React;
 
+// GASから返るDate型ISO文字列 → "HH:MM" に変換
+function fmtTime(t) {
+  if (!t) return '';
+  if (typeof t === 'string' && t.includes('T')) {
+    const d = new Date(t);
+    if (!isNaN(d.getTime())) {
+      // UTC+9(JST)に変換してHH:MMを取得
+      const jst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+      return `${String(jst.getUTCHours()).padStart(2,'0')}:${String(jst.getUTCMinutes()).padStart(2,'0')}`;
+    }
+  }
+  return String(t).slice(0, 5); // 念のためHH:MMに切り詰め
+}
+
 function ShiftPage({ auth }) {
   const { shifts, setShifts, shiftMaster, staff, showToast } = useContextS(AppCtx);
   const [view, setView] = useStateS(window.__shiftView || 'month'); // month | week | gantt
@@ -68,7 +82,7 @@ function ShiftPage({ auth }) {
             <button className={view === 'gantt' ? 'active' : ''} onClick={() => setView('gantt')}>日</button>
           </div>
           <div className="legend">
-            {shiftMaster.map((t) => <span key={t.id} className="leg"><span className="sw" style={{ background: t.color }}></span>{t.label}{t.start && ` ${t.start}-${t.end}`}</span>)}
+            {shiftMaster.map((t) => <span key={t.id} className="leg"><span className="sw" style={{ background: t.color }}></span>{t.label}{t.start && ` ${fmtTime(t.start)}-${fmtTime(t.end)}`}</span>)}
           </div>
         </div>
 
@@ -98,8 +112,8 @@ function ShiftPage({ auth }) {
                       {days.map((d) => {
                       const sh = shifts[`${s.id}|${d.iso}`];
                       const m = sh ? shiftMaster.find((x) => x.id === sh.typeId) : null;
-                      const start = sh?.override?.start || m?.start;
-                      const end = sh?.override?.end || m?.end;
+                      const start = fmtTime(sh?.override?.start || m?.start);
+                      const end   = fmtTime(sh?.override?.end   || m?.end);
                       if (start && end) {
                         const [ih, im] = start.split(':').map(Number);
                         const [oh, om] = end.split(':').map(Number);
@@ -110,7 +124,7 @@ function ShiftPage({ auth }) {
                             {m &&
                           <div className="cell-shift" style={{ background: m.color }}>
                                 <div className="lbl">{m.label}</div>
-                                {start && <div className="time mono">{start}</div>}
+                                {start && <div className="time mono">{start}〜{end}</div>}
                               </div>
                           }
                           </td>);
@@ -167,7 +181,7 @@ function WeekView({ staff, shifts, master, year, month, onCellClick }) {
             const m = sh ? master.find((x) => x.id === sh.typeId) : null;
             return (
               <div key={i} className="wk-cell" onClick={() => onCellClick(s.id, iso)}>
-                  {m && <div className="wk-shift" style={{ background: m.color }}><strong>{m.label}</strong>{m.start && <span className="mono">{m.start}-{m.end}</span>}</div>}
+                  {m && <div className="wk-shift" style={{ background: m.color }}><strong>{m.label}</strong>{m.start && <span className="mono">{fmtTime(m.start)}-{fmtTime(m.end)}</span>}</div>}
                 </div>);
 
           })}
@@ -195,8 +209,8 @@ function GanttView({ staff, shifts, master, year, month }) {
           const m = sh ? master.find((x) => x.id === sh.typeId) : null;
           let leftPct = 0,widthPct = 0;
           if (m && m.start) {
-            const [sh1, sm1] = m.start.split(':').map(Number);
-            const [eh1, em1] = m.end.split(':').map(Number);
+            const [sh1, sm1] = fmtTime(m.start).split(':').map(Number);
+            const [eh1, em1] = fmtTime(m.end).split(':').map(Number);
             const startMin = sh1 * 60 + sm1 - 6 * 60;
             const endMin = eh1 * 60 + em1 - 6 * 60;
             leftPct = startMin / (HOURS.length * 60) * 100;
@@ -208,7 +222,7 @@ function GanttView({ staff, shifts, master, year, month }) {
               <div className="gantt-track">
                 {m && m.start &&
                 <div className="gantt-bar" style={{ left: `${leftPct}%`, width: `${widthPct}%`, background: m.color }}>
-                    <strong>{m.label}</strong> <span className="mono">{m.start}-{m.end}</span>
+                    <strong>{m.label}</strong> <span className="mono">{fmtTime(m.start)}-{fmtTime(m.end)}</span>
                   </div>
                 }
               </div>
@@ -223,13 +237,13 @@ function GanttView({ staff, shifts, master, year, month }) {
 function ShiftEditModal({ sel, master, current, onClose, onSave, onDelete, staffName }) {
   const [typeId, setTypeId] = useStateS(current?.typeId || 'mid');
   const baseM = master.find((m) => m.id === typeId);
-  const [start, setStart] = useStateS(current?.override?.start || baseM?.start || '');
-  const [end, setEnd] = useStateS(current?.override?.end || baseM?.end || '');
+  const [start, setStart] = useStateS(fmtTime(current?.override?.start || baseM?.start || ''));
+  const [end, setEnd] = useStateS(fmtTime(current?.override?.end || baseM?.end || ''));
 
   function pickType(id) {
     setTypeId(id);
     const m = master.find((x) => x.id === id);
-    setStart(m.start);setEnd(m.end);
+    setStart(fmtTime(m.start));setEnd(fmtTime(m.end));
   }
   const isOverride = baseM && (start !== baseM.start || end !== baseM.end);
 
@@ -245,7 +259,7 @@ function ShiftEditModal({ sel, master, current, onClose, onSave, onDelete, staff
               <button key={m.id} type="button" className={`shift-chip ${typeId === m.id ? 'active' : ''}`} onClick={() => pickType(m.id)} style={{ borderColor: typeId === m.id ? '#1e40af' : '#cbd5e1' }}>
                   <span className="sw" style={{ background: m.color }}></span>
                   <strong>{m.label}</strong>
-                  {m.start && <span className="mono small">{m.start}-{m.end}</span>}
+                  {m.start && <span className="mono small">{fmtTime(m.start)}-{fmtTime(m.end)}</span>}
                 </button>
               )}
             </div>
