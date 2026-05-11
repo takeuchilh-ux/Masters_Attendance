@@ -426,11 +426,8 @@ function Shell({ auth, setAuth, route, setRoute, lang, setLang }) {
             <strong>{navItems.find((n) => n.id === route)?.label}</strong>
           </div>
           <div className="topbar-right">
-            <span style={{fontSize:11,padding:'3px 10px',borderRadius:999,fontWeight:600,whiteSpace:'nowrap',
-              background:gasStatus==='ok'?'#d1fae5':gasStatus==='error'?'#fee2e2':'#fef9c3',
-              color:gasStatus==='ok'?'#065f46':gasStatus==='error'?'#991b1b':'#92400e',
-              border:'1px solid',borderColor:gasStatus==='ok'?'#6ee7b7':gasStatus==='error'?'#fca5a5':'#fde68a'}}>
-              {gasStatus==='ok'?'🟢 スプシ連携中':gasStatus==='error'?'🔴 ローカルモード':'🟡 接続中...'}
+            <span title={gasStatus==='ok'?'スプレッドシート連携中':gasStatus==='error'?'GAS接続エラー':'接続中...'} style={{fontSize:16,lineHeight:1}}>
+              {gasStatus==='ok'?'🟢':gasStatus==='error'?'🔴':'🟡'}
             </span>
             <Clock />
             <select className="lang-select small" value={lang} onChange={(e) => setLang(e.target.value)}>
@@ -587,8 +584,7 @@ function HomePunch({ auth }) {
               <div className="check">✓</div>
               <strong>{result.kind === 'in' ? '出勤' : '退勤'}を打刻しました</strong>
               <div className="time">{result.time}</div>
-              <div className="muted">{result.name} さん、おつかれさまです</div>
-              <div className="muted small">スプレッドシートに反映されました</div>
+              <div className="muted">{result.name} さん、{result.kind === 'in' ? '宜しくお願いします！' : 'お疲れ様でした！'}</div>
             </div>
             <button className="btn-primary" onClick={reset}>完了</button>
           </div>
