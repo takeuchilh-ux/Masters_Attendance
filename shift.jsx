@@ -393,6 +393,7 @@ function RequestsPage({ isAdmin, auth }) {
       showToast('却下しました');
     }
     setRequests((rs) => rs.map((r) => r.id === id ? { ...r, status } : r));
+    gasPost({ action: 'approveRequest', requestId: id, status, approverId: 'admin' }); // GASへ書き込み
   }
 
   return (

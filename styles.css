@@ -200,6 +200,10 @@ button { font-family: inherit; cursor: pointer; }
 .crumbs strong { color: var(--ink); margin-left: 0; }
 .crumbs .sep { margin: 0 6px; }
 .topbar-right { display: flex; align-items: center; gap: 16px; }
+.gas-badge { font-size: 11px; padding: 3px 8px; border-radius: 999px; font-weight: 600; background: #f1f5f9; color: var(--muted); }
+.gas-badge.ok { background: #d1fae5; color: #065f46; }
+.gas-badge.error { background: #fee2e2; color: #991b1b; }
+.gas-badge.loading { background: #fef9c3; color: #92400e; }
 .topclock { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--ink2); }
 .topclock strong { font-family: 'JetBrains Mono', monospace; font-size: 15px; color: var(--ink); font-weight: 600; }
 

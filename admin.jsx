@@ -79,6 +79,7 @@ function PunchAdmin() {
 
   function savePunch(updated) {
     setPunches(ps => ps.map(p => (p.staffId===updated.staffId && p.date===updated.date) ? { ...p, ...updated } : p));
+    gasPost({ action:'upsertPunch', data: updated }); // GASへ書き込み
     showToast('打刻を更新しました');
     setEditingPunch(null);
   }
@@ -704,7 +705,7 @@ function StaffAdmin() {
                 <td className="mono">{s.joined}</td>
                 <td>
                   <button className="btn-mini" onClick={()=>setEditing(s)}>編集</button>
-                  <button className="btn-mini danger" onClick={()=>{ if(confirm('削除しますか?')) setStaff(ls => ls.filter(x=>x.id!==s.id)); }}>削除</button>
+                  <button className="btn-mini danger" onClick={()=>{ if(confirm('削除しますか?')) { setStaff(ls => ls.filter(x=>x.id!==s.id)); gasPost({ action:'deleteStaff', staffId:s.id }); } }}>削除</button>
                 </td>
               </tr>
             ))}
@@ -714,8 +715,12 @@ function StaffAdmin() {
 
       {editing && <StaffEditModal staff={editing} onClose={()=>setEditing(null)} onSave={(s)=>{
         setStaff(list => {
-          if (editing.id) return list.map(x => x.id===editing.id ? {...x, ...s} : x);
+          if (editing.id) {
+            gasPost({ action:'upsertStaff', data:{ ...s, id:editing.id } });
+            return list.map(x => x.id===editing.id ? {...x, ...s} : x);
+          }
           const id = `${s.tenantId}-${String(list.length+1).padStart(2,'0')}`;
+          gasPost({ action:'upsertStaff', data:{ ...s, id } });
           return [...list, { ...s, id, joined: new Date().toISOString().slice(0,10) }];
         });
         showToast('スタッフ情報を保存しました'); setEditing(null);

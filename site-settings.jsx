@@ -52,7 +52,7 @@ function SiteStaffAdmin({ auth }) {
         return `${label}: ${val}`;
       })
       .join(' / ');
-    setRequests(rs => [...rs, {
+    const req = {
       id: `R${Date.now()}`,
       staffId: targetStaff?.id || '新規',
       staffName: staffData.name || targetStaff?.name || '',
@@ -64,7 +64,9 @@ function SiteStaffAdmin({ auth }) {
       targetStaffId: targetStaff?.id || null,
       status: '承認待ち',
       submittedAt: new Date().toISOString().slice(0, 10),
-    }]);
+    };
+    setRequests(rs => [...rs, req]);
+    gasPost({ action: 'upsertRequest', data: req }); // GASへ書き込み
     showToast('申請を送信しました。本社の承認をお待ちください');
   }
 

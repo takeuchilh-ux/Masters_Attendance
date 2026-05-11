@@ -4,6 +4,26 @@
 
 const { useState, useEffect, useMemo, useRef, createContext, useContext } = React;
 
+// ============================================================
+// Google Apps Script 連携
+// ============================================================
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbz4uTCKEBv0Iehm3A_STdOiLkH34Ly2oIqTuwna3SGYdCJyv8-b9H8twEa5frAVIUwR/exec';
+
+async function gasGet(params) {
+  try {
+    const qs = new URLSearchParams(params).toString();
+    const res = await fetch(`${GAS_URL}?${qs}`);
+    return await res.json();
+  } catch(e) { console.warn('GAS GET error:', e); return null; }
+}
+
+async function gasPost(body) {
+  try {
+    // no-cors で fire-and-forget（GAS側は受信・処理する）
+    await fetch(GAS_URL, { method:'POST', mode:'no-cors', body: JSON.stringify(body) });
+  } catch(e) { console.warn('GAS POST error:', e); }
+}
+
 // ---------- 仮データ ----------
 const TENANTS = [
 { id: 'hq',    name: '本社',             code: 'HQ', email: 'admin@masters.co.jp',   password: 'admin123',  isAdmin: true  },
@@ -120,6 +140,26 @@ function AppProvider({ children }) {
   const [staff, setStaff] = useState(ALL_STAFF);
   const [tenants, setTenants] = useState(TENANTS);
   const [toast, setToast] = useState(null);
+  const [gasStatus, setGasStatus] = useState('loading'); // 'loading' | 'ok' | 'error'
+
+  // GAS からマスタデータを初回ロード
+  useEffect(() => {
+    Promise.all([
+      gasGet({ type: 'staff' }),
+      gasGet({ type: 'tenants' }),
+      gasGet({ type: 'shifts' }),
+      gasGet({ type: 'requests' }),
+    ]).then(([staffData, tenantsData, shiftsData, requestsData]) => {
+      if (Array.isArray(staffData)    && staffData.length    > 0) setStaff(staffData);
+      if (Array.isArray(tenantsData)  && tenantsData.length  > 0) setTenants(tenantsData);
+      if (Array.isArray(shiftsData)   && shiftsData.length   > 0) setShiftMaster(shiftsData);
+      if (Array.isArray(requestsData) && requestsData.length > 0) setRequests(requestsData);
+      setGasStatus('ok');
+    }).catch(err => {
+      console.warn('GAS読込失敗、ローカルデータを使用:', err);
+      setGasStatus('error');
+    });
+  }, []);
 
   function showToast(msg, kind = 'success') {
     setToast({ msg, kind, t: Date.now() });
@@ -133,7 +173,8 @@ function AppProvider({ children }) {
     requests, setRequests,
     staff, setStaff,
     tenants, setTenants,
-    toast, showToast
+    toast, showToast,
+    gasStatus,
   };
   return <AppCtx.Provider value={value}>{children}{toast && <Toast {...toast} />}</AppCtx.Provider>;
 }
@@ -294,6 +335,7 @@ function Login({ onLogin, lang, setLang }) {
 // Shell
 // ============================================================
 function Shell({ auth, setAuth, route, setRoute, lang, setLang }) {
+  const { gasStatus } = useContext(AppCtx);
   const tenant = TENANTS.find((t) => t.id === auth.tenantId);
   const isAdmin = auth.isAdmin;
   const [settingsUnlocked, setSettingsUnlocked] = useState(false);
@@ -384,6 +426,9 @@ function Shell({ auth, setAuth, route, setRoute, lang, setLang }) {
             <strong>{navItems.find((n) => n.id === route)?.label}</strong>
           </div>
           <div className="topbar-right">
+            <span className={`gas-badge ${gasStatus}`} title={gasStatus==='ok'?'スプレッドシート連携中':gasStatus==='error'?'GAS接続エラー（ローカルデータ使用中）':'スプレッドシート接続中...'}>
+              {gasStatus==='ok'?'🟢 スプシ連携中':gasStatus==='error'?'🔴 ローカルモード':'🟡 接続中...'}
+            </span>
             <Clock />
             <select className="lang-select small" value={lang} onChange={(e) => setLang(e.target.value)}>
               <option value="ja">日本語</option>
@@ -455,16 +500,18 @@ function HomePunch({ auth }) {
     const today = now.toISOString().slice(0, 10);
     const existing = punches.find((p) => p.staffId === selected.id && p.date === today);
     if (kind === 'in') {
-      if (existing) {showToast('本日は既に出勤打刻済みです', 'error');} else
-      {
-        setPunches((ps) => [{ staffId: selected.id, staffName: selected.name, tenantId: selected.tenantId, date: today, clockIn: `${hh}:${mm}`, clockOut: '', status: '正常' }, ...ps]);
+      if (existing) {showToast('本日は既に出勤打刻済みです', 'error');} else {
+        const newPunch = { staffId: selected.id, staffName: selected.name, tenantId: selected.tenantId, date: today, clockIn: `${hh}:${mm}`, clockOut: '', status: '正常' };
+        setPunches((ps) => [newPunch, ...ps]);
+        gasPost({ action: 'upsertPunch', data: newPunch }); // GASへ書き込み
         setResult({ kind: 'in', time: `${hh}:${mm}`, name: selected.name });
         setStep('done');
       }
     } else {
-      if (!existing) {showToast('まず出勤打刻をしてください', 'error');} else
-      {
-        setPunches((ps) => ps.map((p) => p.staffId === selected.id && p.date === today ? { ...p, clockOut: `${hh}:${mm}` } : p));
+      if (!existing) {showToast('まず出勤打刻をしてください', 'error');} else {
+        const updated = { ...existing, clockOut: `${hh}:${mm}` };
+        setPunches((ps) => ps.map((p) => p.staffId === selected.id && p.date === today ? updated : p));
+        gasPost({ action: 'upsertPunch', data: updated }); // GASへ書き込み
         setResult({ kind: 'out', time: `${hh}:${mm}`, name: selected.name });
         setStep('done');
       }
@@ -561,12 +608,14 @@ function RequestModal({ staff, onClose }) {
 
   function submit() {
     if (!staff) {showToast('スタッフが選択されていません', 'error');return;}
-    setRequests((rs) => [{
+    const req = {
       id: `R${Date.now()}`,
       staffId: staff.id, staffName: staff.name, tenantId: staff.tenantId,
       type, date, reason, status: '承認待ち',
       submittedAt: new Date().toISOString().slice(0, 10)
-    }, ...rs]);
+    };
+    setRequests((rs) => [req, ...rs]);
+    gasPost({ action: 'upsertRequest', data: req }); // GASへ書き込み
     showToast('申請を送信しました');
     onClose();
   }
