@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>マスターズ勤怠システム</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="app.jsx"></script>
+<script type="text/babel" src="admin.jsx"></script>
+<script type="text/babel" src="shift.jsx"></script>
+<script type="text/babel" src="site-settings.jsx"></script>
+
+<script type="text/babel">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "shiftView": "month",
+  "denseLayout": false,
+  "primaryHue": "blue"
+}/*EDITMODE-END*/;
+
+function Tweaks() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  React.useEffect(() => {
+    window.postMessage({ type:'__shift_view', view: t.shiftView }, '*');
+    document.documentElement.style.setProperty('--primary',
+      t.primaryHue==='teal' ? '#0f766e' : t.primaryHue==='violet' ? '#6d28d9' : '#1e40af');
+  }, [t.shiftView, t.primaryHue]);
+  return (
+    <TweaksPanel>
+      <TweakSection title="シフト表示形式">
+        <TweakRadio label="既定ビュー" value={t.shiftView} options={[
+          {value:'month',label:'月マトリクス'},
+          {value:'week',label:'週'},
+          {value:'gantt',label:'ガント'},
+        ]} onChange={v=>setTweak('shiftView', v)} />
+      </TweakSection>
+      <TweakSection title="アクセントカラー">
+        <TweakColor label="プライマリ" value={t.primaryHue} options={['blue','teal','violet']} onChange={v=>setTweak('primaryHue', v)} />
+      </TweakSection>
+    </TweaksPanel>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<><App /><Tweaks /></>);
+</script>
+</body>
+</html>
