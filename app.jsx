@@ -426,7 +426,10 @@ function Shell({ auth, setAuth, route, setRoute, lang, setLang }) {
             <strong>{navItems.find((n) => n.id === route)?.label}</strong>
           </div>
           <div className="topbar-right">
-            <span className={`gas-badge ${gasStatus}`} title={gasStatus==='ok'?'スプレッドシート連携中':gasStatus==='error'?'GAS接続エラー（ローカルデータ使用中）':'スプレッドシート接続中...'}>
+            <span style={{fontSize:11,padding:'3px 10px',borderRadius:999,fontWeight:600,whiteSpace:'nowrap',
+              background:gasStatus==='ok'?'#d1fae5':gasStatus==='error'?'#fee2e2':'#fef9c3',
+              color:gasStatus==='ok'?'#065f46':gasStatus==='error'?'#991b1b':'#92400e',
+              border:'1px solid',borderColor:gasStatus==='ok'?'#6ee7b7':gasStatus==='error'?'#fca5a5':'#fde68a'}}>
               {gasStatus==='ok'?'🟢 スプシ連携中':gasStatus==='error'?'🔴 ローカルモード':'🟡 接続中...'}
             </span>
             <Clock />
