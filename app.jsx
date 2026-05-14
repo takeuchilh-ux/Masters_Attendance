@@ -227,9 +227,7 @@ function Shell({ auth, setAuth }) {
             <span className="sep">／</span>
             <strong>{navItems.find(n => n.id === route)?.label}</strong>
           </div>
-          <div className="topbar-right">
-            <Clock />
-          </div>
+          <div className="topbar-right"></div>
         </header>
 
         <div className="page">

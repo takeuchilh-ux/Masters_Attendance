@@ -741,7 +741,6 @@ function AlertsPage() {
       <div className="page-head">
         <div>
           <h1>アラート</h1>
-          <p className="muted">有給申請の超過アラート（月のシフト日数を超えた場合に発火）</p>
         </div>
         <div className="actions">
           {unreadCount > 0 && (

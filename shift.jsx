@@ -135,8 +135,8 @@ function ShiftPage({ auth }) {
     <div className="stack">
       <div className="page-head">
         <div>
-          <h1>シフト作成</h1>
-          <p className="muted">月単位でシフトを編集できます。マスを直接クリックして編集</p>
+          <h1>シフト</h1>
+          <p className="muted">全事業所のシフトを閲覧・作成・編集できます。セルをクリックして編集</p>
         </div>
         <div className="actions">
           <button className="btn-ghost" onClick={printPDF}>📄 PDF作成</button>
@@ -156,9 +156,12 @@ function ShiftPage({ auth }) {
             }}>▶</button>
           </div>
 
-          <select value={officeId} onChange={e => setOfficeId(e.target.value)}>
-            {offices.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-          </select>
+          <label className="field inline" style={{ background: '#fff', padding: '4px 10px', border: '1px solid var(--line-strong)', borderRadius: 6 }}>
+            <span style={{ fontSize: 11, color: 'var(--muted)', marginRight: 4 }}>事業所</span>
+            <select value={officeId} onChange={e => setOfficeId(e.target.value)} style={{ border: 'none', background: 'transparent', padding: '4px 0', fontSize: 13 }}>
+              {offices.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+            </select>
+          </label>
 
           <div className="view-tabs">
             <button className={view === 'month' ? 'active' : ''} onClick={() => setView('month')}>月</button>
