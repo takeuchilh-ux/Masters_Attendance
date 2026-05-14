@@ -1,11 +1,12 @@
 // ============================================================
-// MasuTa! 大本管理者画面 - メインアプリ
+// MasuTa! 本部管理画面 - メインアプリ
 // ============================================================
 
 const { useState, useEffect, useMemo, createContext, useContext } = React;
 
 // ============================================================
 // Supabase クライアント
+// ※ SUPABASE_ANON は "anon（公開）キー" のため、フロントエンドに含めて問題なし
 // ============================================================
 const SUPABASE_URL  = 'https://dzwsdmcffrubjimnrfyf.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR6d3NkbWNmZnJ1YmppbW5yZnlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3MjkxODAsImV4cCI6MjA5NDMwNTE4MH0.VXEGijG64gi9TMWDhrvZE6qcs0ZnArbZRrquGbpN-Kg';
@@ -15,10 +16,8 @@ const supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 const mdb = (table) => supa.schema('masuta').from(table);
 
 // ============================================================
-// 定数
+// 定数（シークレットは一切含まない）
 // ============================================================
-const ADMIN_PASS = 'masuta2026';
-
 const REQUEST_TYPE_LABELS = {
   late:             '遅刻',
   early_leave:      '早退',
@@ -95,39 +94,59 @@ function AppProvider({ children }) {
 }
 
 // ============================================================
-// App（ルーティング）
+// App（Supabase Auth セッション管理）
 // ============================================================
 function App() {
-  const [auth, setAuth] = useState(() => {
-    try { return JSON.parse(sessionStorage.getItem('masuta-auth')); } catch { return null; }
-  });
+  const [auth,    setAuth]    = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (auth) sessionStorage.setItem('masuta-auth', JSON.stringify(auth));
-    else sessionStorage.removeItem('masuta-auth');
-  }, [auth]);
+    // 初回: 既存セッション確認
+    supa.auth.getSession().then(({ data: { session } }) => {
+      setAuth(session ? { role: 'admin', name: '本部' } : null);
+      setLoading(false);
+    });
+    // セッション変化を監視（ログイン/ログアウト自動反映）
+    const { data: { subscription } } = supa.auth.onAuthStateChange((_event, session) => {
+      setAuth(session ? { role: 'admin', name: '本部' } : null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="login-bg" style={{ display: 'grid', placeItems: 'center' }}>
+        <span className="muted">読み込み中...</span>
+      </div>
+    );
+  }
 
   return (
     <AppProvider>
-      {auth ? <Shell auth={auth} setAuth={setAuth} /> : <Login onLogin={setAuth} />}
+      {auth ? <Shell auth={auth} /> : <Login />}
     </AppProvider>
   );
 }
 
 // ============================================================
-// Login
+// Login（Supabase Auth: メール＋パスワード）
 // ============================================================
-function Login({ onLogin }) {
-  const [pw,  setPw]  = useState('');
-  const [err, setErr] = useState('');
+function Login() {
+  const [email,   setEmail]   = useState('');
+  const [pw,      setPw]      = useState('');
+  const [err,     setErr]     = useState('');
+  const [loading, setLoading] = useState(false);
 
-  function submit(e) {
+  async function submit(e) {
     e.preventDefault();
-    if (pw === ADMIN_PASS) {
-      onLogin({ role: 'admin', name: '本部' });
-    } else {
-      setErr('パスワードが違います');
+    setErr('');
+    setLoading(true);
+    const { error } = await supa.auth.signInWithPassword({ email, password: pw });
+    setLoading(false);
+    if (error) {
+      setErr('メールアドレスまたはパスワードが違います');
     }
+    // 成功時は onAuthStateChange が App のセッションを自動更新
   }
 
   return (
@@ -140,18 +159,29 @@ function Login({ onLogin }) {
         </div>
         <form onSubmit={submit} className="login-form">
           <label className="field">
+            <span>メールアドレス</span>
+            <input
+              type="email"
+              value={email}
+              onChange={e => { setEmail(e.target.value); setErr(''); }}
+              placeholder="admin@example.com"
+              autoFocus
+            />
+          </label>
+          <label className="field">
             <span>パスワード</span>
             <input
-              className="text-input mono"
+              className="mono"
               type="password"
               value={pw}
               onChange={e => { setPw(e.target.value); setErr(''); }}
               placeholder="••••••••"
-              autoFocus
             />
           </label>
           {err && <div className="err">{err}</div>}
-          <button className="btn-primary big" type="submit">ログイン</button>
+          <button className="btn-primary big" type="submit" disabled={loading}>
+            {loading ? '認証中...' : 'ログイン'}
+          </button>
         </form>
       </div>
       <div className="login-foot">© 2026 Masters Staff Inc. — 内部利用専用</div>
@@ -162,7 +192,7 @@ function Login({ onLogin }) {
 // ============================================================
 // Shell
 // ============================================================
-function Shell({ auth, setAuth }) {
+function Shell({ auth }) {
   const [route, setRoute] = useState('dashboard');
   const { dbStatus, unreadAlerts } = useContext(AppCtx);
 
@@ -176,6 +206,10 @@ function Shell({ auth, setAuth }) {
     { id: 'alerts',    label: 'アラート',        icon: '🔔', badge: unreadAlerts },
     { id: 'offices',   label: '事業所登録',      icon: '🏢' },
   ];
+
+  function logout() {
+    supa.auth.signOut(); // onAuthStateChange が auth を null にする
+  }
 
   return (
     <div className="shell">
@@ -216,7 +250,7 @@ function Shell({ auth, setAuth }) {
           >
             {dbStatus === 'ok' ? '🟢' : dbStatus === 'error' ? '🔴' : '🟡'}
           </span>
-          <button className="btn-ghost" onClick={() => setAuth(null)}>ログアウト</button>
+          <button className="btn-ghost" onClick={logout}>ログアウト</button>
         </div>
       </aside>
 
@@ -246,23 +280,8 @@ function Shell({ auth, setAuth }) {
 }
 
 // ============================================================
-// Clock / Toast
+// Toast
 // ============================================================
-function Clock() {
-  const [now, setNow] = useState(new Date());
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(id);
-  }, []);
-  const wd = ['日','月','火','水','木','金','土'][now.getDay()];
-  return (
-    <div className="topclock">
-      <span>{now.getFullYear()}/{String(now.getMonth()+1).padStart(2,'0')}/{String(now.getDate()).padStart(2,'0')} ({wd})</span>
-      <strong>{String(now.getHours()).padStart(2,'0')}:{String(now.getMinutes()).padStart(2,'0')}:{String(now.getSeconds()).padStart(2,'0')}</strong>
-    </div>
-  );
-}
-
 function Toast({ msg, kind }) {
   return <div className={`toast ${kind}`}>{msg}</div>;
 }
