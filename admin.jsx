@@ -4,13 +4,14 @@
 const { useState: useStateA, useEffect: useEffectA, useMemo: useMemoA, useContext: useContextA } = React;
 
 // ============================================================
-// DashboardPage - 全事業所の今日の出欠
+// DashboardPage - 全事業所の今日の出欠（タブ切替）
 // ============================================================
 function DashboardPage() {
   const { offices, staff } = useContextA(AppCtx);
   const [todayShifts,  setTodayShifts]  = useStateA([]);
   const [todayTouches, setTodayTouches] = useStateA([]);
-  const [loading, setLoading] = useStateA(true);
+  const [loading,      setLoading]      = useStateA(true);
+  const [activeTab,    setActiveTab]    = useStateA('all');
   const today = new Date().toISOString().slice(0, 10);
 
   useEffectA(() => {
@@ -31,15 +32,52 @@ function DashboardPage() {
       setLoading(false);
     }
     load();
-    // 5分おきに自動更新
     const id = setInterval(load, 5 * 60 * 1000);
     return () => clearInterval(id);
   }, [today]);
 
   const touchedIds = useMemoA(() => new Set(todayTouches.map(t => t.staff_id)), [todayTouches]);
-
   const presentCount = todayShifts.filter(s => touchedIds.has(s.staff_id)).length;
   const absentCount  = todayShifts.filter(s => !touchedIds.has(s.staff_id)).length;
+
+  function OfficeAttendance({ office }) {
+    const offShifts  = todayShifts.filter(s => s.office_id === office.id);
+    const offStaff   = staff.filter(s => s.office_id === office.id);
+    const shiftedIds = new Set(offShifts.map(s => s.staff_id));
+    const present    = offShifts.filter(s => touchedIds.has(s.staff_id)).length;
+    const absent     = offShifts.length - present;
+
+    return (
+      <div className="stack">
+        <div className="kpis">
+          <div className="kpi"><span>本日シフト</span><strong>{offShifts.length}<small>名</small></strong></div>
+          <div className="kpi ok"><span>出勤確認済み</span><strong>{present}<small>名</small></strong></div>
+          <div className="kpi warn"><span>未確認</span><strong>{absent}<small>名</small></strong></div>
+        </div>
+        <div className="card">
+          <div className="attendance-list">
+            {offStaff.filter(s => shiftedIds.has(s.id)).map(s => {
+              const shift      = offShifts.find(sh => sh.staff_id === s.id);
+              const hasTouched = touchedIds.has(s.id);
+              const st         = shift?.shift_types;
+              return (
+                <div key={s.id} className="attendance-row">
+                  <span title={hasTouched ? '出勤確認済み' : '未出勤'}>
+                    {hasTouched ? '🟢' : '🔴'}
+                  </span>
+                  <span className="att-name">{s.name}</span>
+                  {st && <span className="att-shift" style={{ background: st.color }}>{st.label}</span>}
+                </div>
+              );
+            })}
+            {offShifts.length === 0 && (
+              <div className="muted small" style={{ padding: '12px 16px' }}>本日のシフトなし</div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="stack">
@@ -50,61 +88,65 @@ function DashboardPage() {
         </div>
       </div>
 
-      {/* KPI */}
-      <div className="kpis four">
-        <div className="kpi"><span>本日シフト人数</span><strong>{todayShifts.length}<small>名</small></strong></div>
-        <div className="kpi ok"><span>出勤確認済み</span><strong>{presentCount}<small>名</small></strong></div>
-        <div className="kpi warn"><span>未確認</span><strong>{absentCount}<small>名</small></strong></div>
-        <div className="kpi"><span>事業所数</span><strong>{offices.length}<small>箇所</small></strong></div>
+      {/* 事業所タブ */}
+      <div className="tabs" style={{ background: '#fff', borderRadius: 'var(--radius-lg)', border: '1px solid var(--line)', padding: '0 8px' }}>
+        <button className={`tab ${activeTab === 'all' ? 'active' : ''}`} onClick={() => setActiveTab('all')}>全体</button>
+        {offices.map(o => (
+          <button key={o.id} className={`tab ${activeTab === o.id ? 'active' : ''}`} onClick={() => setActiveTab(o.id)}>
+            {o.name}
+          </button>
+        ))}
       </div>
 
       {loading ? (
         <div className="card" style={{ padding: 32, textAlign: 'center' }}><span className="muted">読み込み中...</span></div>
-      ) : (
-        /* 事業所別カード */
-        <div className="office-grid">
-          {offices.map(office => {
-            const offShifts  = todayShifts.filter(s => s.office_id === office.id);
-            const offStaff   = staff.filter(s => s.office_id === office.id);
-            const shiftedIds = new Set(offShifts.map(s => s.staff_id));
-            const present    = offShifts.filter(s => touchedIds.has(s.staff_id)).length;
-
-            return (
-              <div key={office.id} className="card office-card">
-                <div className="office-card-head">
-                  <strong>{office.name}</strong>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <span className="pill done">{present}名出勤</span>
-                    <span className="muted small">{offShifts.length}名予定</span>
+      ) : activeTab === 'all' ? (
+        <>
+          <div className="kpis four">
+            <div className="kpi"><span>本日シフト人数</span><strong>{todayShifts.length}<small>名</small></strong></div>
+            <div className="kpi ok"><span>出勤確認済み</span><strong>{presentCount}<small>名</small></strong></div>
+            <div className="kpi warn"><span>未確認</span><strong>{absentCount}<small>名</small></strong></div>
+            <div className="kpi"><span>事業所数</span><strong>{offices.length}<small>箇所</small></strong></div>
+          </div>
+          <div className="office-grid">
+            {offices.map(office => {
+              const offShifts  = todayShifts.filter(s => s.office_id === office.id);
+              const offStaff   = staff.filter(s => s.office_id === office.id);
+              const shiftedIds = new Set(offShifts.map(s => s.staff_id));
+              const present    = offShifts.filter(s => touchedIds.has(s.staff_id)).length;
+              return (
+                <div key={office.id} className="card office-card">
+                  <div className="office-card-head">
+                    <strong>{office.name}</strong>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <span className="pill done">{present}名出勤</span>
+                      <span className="muted small">{offShifts.length}名予定</span>
+                    </div>
+                  </div>
+                  <div className="attendance-list">
+                    {offStaff.filter(s => shiftedIds.has(s.id)).map(s => {
+                      const shift      = offShifts.find(sh => sh.staff_id === s.id);
+                      const hasTouched = touchedIds.has(s.id);
+                      const st         = shift?.shift_types;
+                      return (
+                        <div key={s.id} className="attendance-row">
+                          <span title={hasTouched ? '出勤確認済み' : '未出勤'}>{hasTouched ? '🟢' : '🔴'}</span>
+                          <span className="att-name">{s.name}</span>
+                          {st && <span className="att-shift" style={{ background: st.color }}>{st.label}</span>}
+                        </div>
+                      );
+                    })}
+                    {offShifts.length === 0 && (
+                      <div className="muted small" style={{ padding: '8px 12px' }}>本日のシフトなし</div>
+                    )}
                   </div>
                 </div>
-                <div className="attendance-list">
-                  {offStaff.filter(s => shiftedIds.has(s.id)).map(s => {
-                    const shift    = offShifts.find(sh => sh.staff_id === s.id);
-                    const hasTouched = touchedIds.has(s.id);
-                    const st = shift?.shift_types;
-                    return (
-                      <div key={s.id} className="attendance-row">
-                        <span title={hasTouched ? '出勤確認済み' : '未出勤'}>
-                          {hasTouched ? '🟢' : '🔴'}
-                        </span>
-                        <span className="att-name">{s.name}</span>
-                        {st && (
-                          <span className="att-shift" style={{ background: st.color }}>
-                            {st.label}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {offShifts.length === 0 && (
-                    <div className="muted small" style={{ padding: '8px 12px' }}>本日のシフトなし</div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        </>
+      ) : (
+        <OfficeAttendance office={offices.find(o => o.id === activeTab)} />
       )}
     </div>
   );
@@ -253,7 +295,6 @@ function TouchLogPage() {
       <div className="page-head">
         <div>
           <h1>タッチログ</h1>
-          <p className="muted">フェリカタッチの生ログです（大本管理者のみ閲覧可）</p>
         </div>
       </div>
       <div className="card">
@@ -502,7 +543,7 @@ function StaffAdminPage() {
     }
   }
 
-  const ROLE_LABELS = { staff: '一般', office_manager: '事業所責任者', admin: '大本管理者' };
+  const ROLE_LABELS = { staff: '一般', office_manager: '事業所責任者', admin: '本部' };
   const roleColor   = r => r === 'admin' ? 'role-mgr' : r === 'office_manager' ? 'role-full' : 'role-part';
 
   return (
@@ -587,7 +628,7 @@ function StaffAdminPage() {
 
 function StaffDetailModal({ staff: s, offices, onClose, onEdit }) {
   const office = offices.find(o => o.id === s.office_id);
-  const ROLE_LABELS = { staff: '一般', office_manager: '事業所責任者', admin: '大本管理者' };
+  const ROLE_LABELS = { staff: '一般', office_manager: '事業所責任者', admin: '本部' };
   return (
     <div className="modal-bg" onClick={onClose}>
       <div className="modal" style={{ width: 440 }} onClick={e => e.stopPropagation()}>
@@ -609,11 +650,6 @@ function StaffDetailModal({ staff: s, offices, onClose, onEdit }) {
             <span className="muted">IC Card IDm</span><br />
             <span className="mono">{s.ic_card_idm || '未登録'}</span>
           </div>
-          <div className="form-section-label" style={{ marginTop: 16 }}>アプリ設定</div>
-          <div style={{ fontSize: 13 }}>
-            <span className="muted">パスコード（打刻アプリ用）</span><br />
-            <span className="mono">{s.passcode || '—'}</span>
-          </div>
           <div className="muted small" style={{ marginTop: 16 }}>
             登録日: {s.created_at?.slice(0, 10)}
           </div>
@@ -629,12 +665,11 @@ function StaffDetailModal({ staff: s, offices, onClose, onEdit }) {
 
 function StaffEditModal({ staff: s, offices, onClose, onSave }) {
   const [form, setForm] = useStateA({
-    id:           s.id,
-    name:         s.name         || '',
-    office_id:    s.office_id    || offices[0]?.id,
-    role:         s.role         || 'staff',
-    ic_card_idm:  s.ic_card_idm  || '',
-    passcode:     s.passcode     || '',
+    id:          s.id,
+    name:        s.name        || '',
+    office_id:   s.office_id   || offices[0]?.id,
+    role:        s.role        || 'staff',
+    ic_card_idm: s.ic_card_idm || '',
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -652,7 +687,7 @@ function StaffEditModal({ staff: s, offices, onClose, onSave }) {
               <select value={form.role} onChange={e => set('role', e.target.value)}>
                 <option value="staff">一般</option>
                 <option value="office_manager">事業所責任者</option>
-                <option value="admin">大本管理者</option>
+                <option value="admin">本部</option>
               </select>
             </label>
           </div>
@@ -664,10 +699,6 @@ function StaffEditModal({ staff: s, offices, onClose, onSave }) {
           <label className="field">
             <span>IC Card IDm（フェリカ）</span>
             <input className="mono" value={form.ic_card_idm} onChange={e => set('ic_card_idm', e.target.value)} placeholder="01 23 45 67 89 AB CD EF" />
-          </label>
-          <label className="field">
-            <span>パスコード（打刻アプリ用）</span>
-            <input className="mono" value={form.passcode} onChange={e => set('passcode', e.target.value)} placeholder="4〜8桁" />
           </label>
         </div>
         <div className="modal-foot">
@@ -758,4 +789,114 @@ function AlertsPage() {
   );
 }
 
-Object.assign(window, { DashboardPage, RequestsViewPage, TouchLogPage, MonthlyPage, StaffAdminPage, AlertsPage });
+// ============================================================
+// OfficesPage - 事業所登録・管理
+// ============================================================
+function OfficesPage() {
+  const { offices, setOffices, showToast } = useContextA(AppCtx);
+  const [editing, setEditing] = useStateA(null); // null = 非表示, {} = 新規, {id,...} = 編集
+
+  async function saveOffice(form) {
+    if (form.id) {
+      const { id, ...rest } = form;
+      const { error } = await mdb('offices').update(rest).eq('id', id);
+      if (!error) {
+        setOffices(os => os.map(o => o.id === id ? { ...o, ...rest } : o));
+        showToast('事業所を更新しました');
+      } else {
+        showToast('更新に失敗しました', 'error');
+      }
+    } else {
+      const { data, error } = await mdb('offices').insert({ name: form.name }).select().single();
+      if (!error && data) {
+        setOffices(os => [...os, data].sort((a, b) => a.name.localeCompare(b.name, 'ja')));
+        showToast('事業所を登録しました');
+      } else {
+        showToast('登録に失敗しました', 'error');
+      }
+    }
+    setEditing(null);
+  }
+
+  async function deleteOffice(id) {
+    if (!confirm('この事業所を削除しますか？\n※所属スタッフがいる場合は削除できません')) return;
+    const { error } = await mdb('offices').delete().eq('id', id);
+    if (!error) {
+      setOffices(os => os.filter(o => o.id !== id));
+      showToast('事業所を削除しました');
+    } else {
+      showToast('削除できません（所属スタッフが存在します）', 'error');
+    }
+  }
+
+  return (
+    <div className="stack">
+      <div className="page-head">
+        <div>
+          <h1>事業所登録</h1>
+          <p className="muted">全{offices.length}事業所を管理します</p>
+        </div>
+        <div className="actions">
+          <button className="btn-primary" onClick={() => setEditing({})}>＋ 事業所登録</button>
+        </div>
+      </div>
+
+      <div className="card">
+        <table className="sheet">
+          <thead><tr>
+            <th className="rownum"></th>
+            <th>事業所名</th>
+            <th>登録日</th>
+            <th>操作</th>
+          </tr></thead>
+          <tbody>
+            {offices.length === 0 && <tr><td colSpan={4} className="empty">事業所がありません</td></tr>}
+            {offices.map((o, i) => (
+              <tr key={o.id}>
+                <td className="rownum">{i + 1}</td>
+                <td><strong>{o.name}</strong></td>
+                <td className="mono">{o.created_at?.slice(0, 10) || '—'}</td>
+                <td>
+                  <button className="btn-mini" onClick={() => setEditing(o)}>編集</button>
+                  <button className="btn-mini danger" onClick={() => deleteOffice(o.id)}>削除</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="sheet-foot">{offices.length}件</div>
+      </div>
+
+      {editing !== null && (
+        <div className="modal-bg" onClick={() => setEditing(null)}>
+          <div className="modal" style={{ width: 400 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-head">
+              <h3>{editing.id ? '事業所編集' : '事業所登録'}</h3>
+              <button className="x" onClick={() => setEditing(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <label className="field">
+                <span>事業所名</span>
+                <input
+                  autoFocus
+                  value={editing.name || ''}
+                  onChange={e => setEditing(f => ({ ...f, name: e.target.value }))}
+                  placeholder="例: 藤沢事業所"
+                />
+              </label>
+            </div>
+            <div className="modal-foot">
+              <button className="btn-ghost" onClick={() => setEditing(null)}>キャンセル</button>
+              <button
+                className="btn-primary"
+                onClick={() => { if (editing.name?.trim()) saveOffice(editing); }}
+              >保存</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+Object.assign(window, { DashboardPage, RequestsViewPage, TouchLogPage, MonthlyPage, StaffAdminPage, AlertsPage, OfficesPage });

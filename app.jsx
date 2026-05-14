@@ -124,7 +124,7 @@ function Login({ onLogin }) {
   function submit(e) {
     e.preventDefault();
     if (pw === ADMIN_PASS) {
-      onLogin({ role: 'admin', name: '大本管理者' });
+      onLogin({ role: 'admin', name: '本部' });
     } else {
       setErr('パスワードが違います');
     }
@@ -136,7 +136,7 @@ function Login({ onLogin }) {
         <div className="login-head">
           <div className="brand-square big">M</div>
           <h1>MasuTa!</h1>
-          <p className="muted">大本管理者ログイン</p>
+          <p className="muted">本部ログイン</p>
         </div>
         <form onSubmit={submit} className="login-form">
           <label className="field">
@@ -174,6 +174,7 @@ function Shell({ auth, setAuth }) {
     { id: 'touchlog',  label: 'タッチログ',      icon: '🔍' },
     { id: 'staff',     label: 'スタッフ管理',    icon: '👥' },
     { id: 'alerts',    label: 'アラート',        icon: '🔔', badge: unreadAlerts },
+    { id: 'offices',   label: '事業所登録',      icon: '🏢' },
   ];
 
   return (
@@ -203,9 +204,9 @@ function Shell({ auth, setAuth }) {
 
         <div className="side-foot">
           <div className="user">
-            <div className="user-av">管</div>
+            <div className="user-av">本</div>
             <div>
-              <strong>大本管理者</strong>
+              <strong>本部</strong>
               <span>全事業所</span>
             </div>
           </div>
@@ -239,6 +240,7 @@ function Shell({ auth, setAuth }) {
           {route === 'touchlog'  && <TouchLogPage />}
           {route === 'staff'     && <StaffAdminPage />}
           {route === 'alerts'    && <AlertsPage />}
+          {route === 'offices'   && <OfficesPage />}
         </div>
       </main>
     </div>
