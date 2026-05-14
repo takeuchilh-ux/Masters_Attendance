@@ -641,3 +641,97 @@ table.sheet { width: 100%; border-collapse: collapse; font-size: 13px; }
 .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
 .row-actions { display: flex; gap: 4px; }
 .empty { text-align: center; color: var(--muted); padding: 32px !important; }
+
+/* ===== KPI カラーバリアント ===== */
+.kpi.ok strong { color: var(--ok); }
+.kpi.warn strong { color: var(--warn); }
+.kpi.danger strong { color: var(--danger); }
+
+/* ===== ダッシュボード - 事業所グリッド ===== */
+.office-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+}
+.office-card {
+  display: flex;
+  flex-direction: column;
+}
+.office-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: #f8fafc;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+.office-card-head strong {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* ===== 出欠リスト ===== */
+.attendance-list {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 0;
+  min-height: 40px;
+}
+.attendance-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  transition: background .1s;
+}
+.attendance-row:hover { background: var(--bg2); }
+.att-name {
+  flex: 1;
+  font-weight: 500;
+}
+.att-shift {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: #fff;
+  opacity: .85;
+}
+
+/* ===== アラート ===== */
+.alert-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+  transition: background .1s;
+}
+.alert-item:last-child { border-bottom: none; }
+.alert-item.unread {
+  background: #fffbeb;
+  border-left: 3px solid #f59e0b;
+}
+.alert-item.read {
+  background: #fff;
+  border-left: 3px solid transparent;
+  opacity: .7;
+}
+.alert-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.alert-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.alert-title {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+}
