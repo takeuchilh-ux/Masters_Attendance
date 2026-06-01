@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>MasuTa! 打刻</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: 'Hiragino Sans', 'Noto Sans JP', -apple-system, sans-serif;
+  background: #f1f5f9; color: #0f172a; font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap {
+  min-height: 100vh; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; padding: 24px 16px;
+}
+.header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+.brand-sq {
+  width: 44px; height: 44px; background: #1e40af; color: #fff;
+  border-radius: 8px; font-size: 22px; font-weight: 700; display: grid; place-items: center;
+}
+.header-text strong { display: block; font-size: 18px; }
+.header-text span   { font-size: 13px; color: #64748b; }
+.card {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(15,23,42,.08); padding: 24px 20px;
+  width: 100%; max-width: 400px;
+}
+.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.field label { font-size: 13px; font-weight: 600; color: #334155; }
+.field select, .field input {
+  padding: 13px 12px; border: 1.5px solid #cbd5e1; border-radius: 8px;
+  font-size: 16px; color: #0f172a; background: #fff; width: 100%;
+}
+.field input {
+  text-align: center; letter-spacing: .3em;
+  font-size: 24px; font-weight: 700;
+}
+.field select:focus, .field input:focus {
+  outline: none; border-color: #1e40af;
+  box-shadow: 0 0 0 3px rgba(30,64,175,.12);
+}
+.hint { font-size: 12px; color: #94a3b8; }
+.err { background: #fee2e2; color: #b91c1c; padding: 10px 14px; border-radius: 8px; font-size: 14px; margin-bottom: 12px; }
+.info { background: #eff6ff; color: #1e40af; padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; }
+
+/* ボタンエリア */
+.btn-area { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.punch-btn {
+  width: 100%; border: none; border-radius: 12px;
+  font-size: 17px; font-weight: 700; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 14px 12px; gap: 2px; transition: opacity .15s;
+}
+.punch-btn:disabled { cursor: not-allowed; }
+.punch-btn .sub { font-size: 12px; font-weight: 500; }
+.btn-in-active  { background: #15803d; color: #fff; }
+.btn-out-active { background: #1d4ed8; color: #fff; }
+.btn-disabled   { background: #f1f5f9; color: #94a3b8; border: 1.5px solid #e2e8f0; }
+.btn-done       { background: #f8fafc; color: #64748b; border: 1.5px solid #e2e8f0; }
+
+/* 経過時間 */
+.elapsed {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;
+  padding: 8px 12px; font-size: 13px; color: #1d4ed8;
+}
+.elapsed .time { font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums; }
+
+/* 完了画面 */
+.done { text-align: center; padding: 16px 0; }
+.done-icon { font-size: 64px; margin-bottom: 12px; }
+.done-name { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+.done-sub  { font-size: 16px; color: #64748b; margin-bottom: 8px; }
+.done-time { font-size: 36px; font-weight: 700; font-variant-numeric: tabular-nums; margin-bottom: 24px; }
+.done-time.in  { color: #15803d; }
+.done-time.out { color: #1d4ed8; }
+.btn-again {
+  background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1;
+  padding: 12px 28px; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer;
+}
+
+/* エラー・ロード */
+.center { text-align: center; padding: 32px 0; }
+.center-icon { font-size: 48px; margin-bottom: 14px; }
+.center p { color: #64748b; font-size: 13px; line-height: 1.8; margin-top: 10px; }
+.loading-spin { font-size: 32px; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+footer { margin-top: 20px; font-size: 12px; color: #94a3b8; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <div class="brand-sq">M</div>
+    <div class="header-text">
+      <strong>MasuTa!</strong>
+      <span id="office-name">読み込み中...</span>
+    </div>
+  </div>
+
+  <!-- ロード中 -->
+  <div class="card" id="card-loading">
+    <div class="center"><div class="loading-spin">⏳</div></div>
+  </div>
+
+  <!-- 無効QR -->
+  <div class="card" id="card-invalid" style="display:none">
+    <div class="center">
+      <div class="center-icon">⚠️</div>
+      <strong style="font-size:18px">無効なQRコードです</strong>
+      <p>事業所責任者または本部に<br>新しいQRコードを<br>発行してもらってください。</p>
+    </div>
+  </div>
+
+  <!-- 位置情報エラー -->
+  <div class="card" id="card-location-error" style="display:none">
+    <div class="center">
+      <div class="center-icon">📍</div>
+      <strong style="font-size:17px" id="loc-err-title">位置情報エラー</strong>
+      <p id="loc-err-msg"></p>
+      <button onclick="retryLocation()" style="margin-top:16px;padding:10px 24px;background:#1e40af;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;">
+        再試行
+      </button>
+    </div>
+  </div>
+
+  <!-- 打刻フォーム -->
+  <div class="card" id="card-form" style="display:none">
+    <div class="field">
+      <label>お名前</label>
+      <select id="sel-staff"><option value="">▼ 選択してください</option></select>
+    </div>
+    <div class="field">
+      <label>生年月日（月日4桁）</label>
+      <input id="inp-birth" type="text" inputmode="numeric" maxlength="4" placeholder="0415" autocomplete="off" />
+      <span class="hint">例：4月15日生まれ → 0415</span>
+    </div>
+    <div id="err-msg" class="err" style="display:none"></div>
+    <div id="btn-area" class="btn-area">
+      <button class="punch-btn btn-disabled" disabled>名前と生年月日を入力してください</button>
+    </div>
+  </div>
+
+  <!-- 完了画面 -->
+  <div class="card" id="card-done" style="display:none">
+    <div class="done">
+      <div class="done-icon" id="done-icon"></div>
+      <div class="done-name" id="done-name"></div>
+      <div class="done-sub"  id="done-sub"></div>
+      <div class="done-time" id="done-time"></div>
+      <button class="btn-again" id="btn-again">続けて打刻する</button>
+    </div>
+  </div>
+
+  <footer>© 2026 Masters Staff Inc.</footer>
+</div>
+
+<script>
+const SUPABASE_URL  = 'https://dzwsdmcffrubjimnrfyf.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR6d3NkbWNmZnJ1YmppbW5yZnlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3MjkxODAsImV4cCI6MjA5NDMwNTE4MH0.VXEGijG64gi9TMWDhrvZE6qcs0ZnArbZRrquGbpN-Kg';
+const supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+const mdb  = (t) => supa.schema('masuta').from(t);
+
+const PUNCH_RADIUS_M = 100;
+
+const params   = new URLSearchParams(location.search);
+const officeId = params.get('o');
+
+let office       = null;
+let staffList    = [];
+let staffId      = '';
+let verifiedName = '';
+let elapsedTimer = null;
+let inTime       = null;
+
+// ── 表示切替 ──────────────────────────────────────────
+function show(id) {
+  ['card-loading','card-invalid','card-location-error','card-form','card-done']
+    .forEach(c => document.getElementById(c).style.display = c === id ? '' : 'none');
+}
+
+// ── Haversine距離計算 ──────────────────────────────────
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2
+    + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// ── 位置情報チェック ──────────────────────────────────
+async function checkLocation() {
+  if (!navigator.geolocation) {
+    throw new Error('このブラウザはGPSに対応していません');
+  }
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        if (accuracy > 150) {
+          reject(new Error(`GPS精度が不十分です（誤差: ${Math.round(accuracy)}m）\n屋外または窓の近くで再試行してください。`));
+          return;
+        }
+        if (office.latitude && office.longitude) {
+          const dist = haversine(latitude, longitude, office.latitude, office.longitude);
+          if (dist > PUNCH_RADIUS_M) {
+            reject(new Error(`事業所から${Math.round(dist)}m離れています。\n事業所内（${PUNCH_RADIUS_M}m以内）から打刻してください。`));
+            return;
+          }
+        }
+        resolve();
+      },
+      (err) => {
+        const msg = err.code === 1
+          ? '位置情報の使用が拒否されています。\nブラウザの設定から位置情報を許可してください。'
+          : '位置情報を取得できませんでした。\n再試行してください。';
+        reject(new Error(msg));
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+    );
+  });
+}
+
+async function retryLocation() {
+  show('card-loading');
+  try {
+    await checkLocation();
+    show('card-form');
+  } catch(e) {
+    document.getElementById('loc-err-msg').innerText = e.message;
+    show('card-location-error');
+  }
+}
+
+// ── 経過時間表示 ──────────────────────────────────────
+function formatElapsed(sinceIso) {
+  const diff = Math.floor((Date.now() - new Date(sinceIso).getTime()) / 60000);
+  const h = Math.floor(diff / 60);
+  const m = diff % 60;
+  return h > 0 ? `${h}時間${m}分` : `${m}分`;
+}
+
+// ── 今日のタッチログ取得 ──────────────────────────────
+async function getTodayLogs(sId) {
+  const today = new Date().toISOString().slice(0, 10);
+  const { data } = await mdb('touch_logs')
+    .select('touch_type, touched_at')
+    .eq('staff_id', sId)
+    .eq('office_id', officeId)
+    .gte('touched_at', `${today}T00:00:00`)
+    .lte('touched_at', `${today}T23:59:59`)
+    .order('touched_at', { ascending: true });
+  return data || [];
+}
+
+// ── ボタンエリアを状態に応じて描画 ──────────────────
+function renderButtons(logs) {
+  clearInterval(elapsedTimer);
+  const area = document.getElementById('btn-area');
+  const hasIn  = logs.some(l => l.touch_type === 'in');
+  const hasOut = logs.some(l => l.touch_type === 'out');
+  const lastIn = logs.filter(l => l.touch_type === 'in').slice(-1)[0];
+
+  if (hasIn && hasOut) {
+    // 両方完了
+    const inT  = new Date(logs.find(l=>l.touch_type==='in').touched_at).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});
+    const outT = new Date(logs.find(l=>l.touch_type==='out').touched_at).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});
+    area.innerHTML = `
+      <button class="punch-btn btn-done" disabled>✅ 出勤済み<span class="sub">${inT} に出勤</span></button>
+      <button class="punch-btn btn-done" disabled>✅ 退勤済み<span class="sub">${outT} に退勤</span></button>
+      <div style="text-align:center;font-size:12px;color:#94a3b8;padding:4px">本日の打刻は完了しています</div>`;
+  } else if (hasIn && !hasOut) {
+    // 出勤済み・退勤前
+    const inT = new Date(lastIn.touched_at).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});
+    inTime = lastIn.touched_at;
+    area.innerHTML = `
+      <button class="punch-btn btn-done" disabled>✅ 出勤済み<span class="sub">${inT} に出勤</span></button>
+      <div class="elapsed" id="elapsed-display">
+        <span>⏱ 出勤から</span><span class="time" id="elapsed-time">${formatElapsed(inTime)}</span><span style="color:#93c5fd">経過中</span>
+      </div>
+      <button class="punch-btn btn-out-active" id="btn-out">🔵 退勤する</button>`;
+    document.getElementById('btn-out').onclick = () => submitPunch('out');
+    elapsedTimer = setInterval(() => {
+      const el = document.getElementById('elapsed-time');
+      if (el) el.textContent = formatElapsed(inTime);
+      else clearInterval(elapsedTimer);
+    }, 30000);
+  } else {
+    // 未出勤
+    area.innerHTML = `
+      <button class="punch-btn btn-in-active" id="btn-in">🟢 出勤する</button>
+      <button class="punch-btn btn-disabled" disabled>🔵 退勤する<span class="sub" style="color:#cbd5e1">先に出勤してください</span></button>`;
+    document.getElementById('btn-in').onclick = () => submitPunch('in');
+  }
+}
+
+// ── 名前・誕生日確認 ──────────────────────────────────
+async function verify() {
+  const sId   = document.getElementById('sel-staff').value;
+  const birth = document.getElementById('inp-birth').value;
+  const err   = document.getElementById('err-msg');
+  err.style.display = 'none';
+
+  if (!sId || birth.length < 4) {
+    document.getElementById('btn-area').innerHTML =
+      `<button class="punch-btn btn-disabled" disabled>名前と生年月日を入力してください</button>`;
+    return;
+  }
+
+  const { data: s } = await mdb('staff').select('name, birth_mmdd').eq('id', sId).single();
+  if (!s || s.birth_mmdd !== birth) {
+    err.textContent   = '生年月日が正しくありません';
+    err.style.display = '';
+    document.getElementById('btn-area').innerHTML =
+      `<button class="punch-btn btn-disabled" disabled>生年月日を確認してください</button>`;
+    staffId = ''; verifiedName = '';
+    return;
+  }
+
+  staffId      = sId;
+  verifiedName = s.name;
+  const logs = await getTodayLogs(sId);
+  renderButtons(logs);
+}
+
+// ── 打刻実行 ──────────────────────────────────────────
+async function submitPunch(type) {
+  const { error } = await mdb('touch_logs').insert({
+    staff_id: staffId, office_id: officeId,
+    touch_type: type, touched_at: new Date().toISOString(),
+  });
+  if (error) {
+    alert('記録に失敗しました。再度お試しください。'); return;
+  }
+  clearInterval(elapsedTimer);
+  const now = new Date();
+  const t   = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  document.getElementById('done-icon').textContent = type === 'in' ? '🟢' : '🔵';
+  document.getElementById('done-name').textContent = verifiedName + ' さん';
+  document.getElementById('done-sub').textContent  = type === 'in' ? '出勤しました' : '退勤しました';
+  document.getElementById('done-time').textContent = t;
+  document.getElementById('done-time').className   = `done-time ${type}`;
+  show('card-done');
+}
+
+// ── 初期化 ────────────────────────────────────────────
+async function init() {
+  if (!officeId) { show('card-invalid'); return; }
+
+  const { data: off } = await mdb('offices').select('name, latitude, longitude').eq('id', officeId).single();
+  if (!off) { show('card-invalid'); return; }
+  office = off;
+  document.getElementById('office-name').textContent = off.name;
+
+  // 位置情報チェック
+  try {
+    await checkLocation();
+  } catch(e) {
+    document.getElementById('loc-err-title').textContent = '位置情報の確認が必要です';
+    document.getElementById('loc-err-msg').innerText = e.message;
+    show('card-location-error');
+    return;
+  }
+
+  // スタッフリスト読み込み
+  const { data: staff } = await mdb('staff')
+    .select('id, name').eq('office_id', officeId).eq('is_active', true).order('name');
+  staffList = staff || [];
+  const sel = document.getElementById('sel-staff');
+  staffList.forEach(s => {
+    const o = document.createElement('option');
+    o.value = s.id; o.textContent = s.name; sel.appendChild(o);
+  });
+
+  // イベント
+  sel.addEventListener('change', verify);
+  document.getElementById('inp-birth').addEventListener('input', e => {
+    e.target.value = e.target.value.replace(/\D/g,'').slice(0,4);
+    if (e.target.value.length === 4) verify(); // 4桁入力で自動確認
+    else {
+      staffId = ''; verifiedName = '';
+      document.getElementById('btn-area').innerHTML =
+        `<button class="punch-btn btn-disabled" disabled>名前と生年月日を入力してください</button>`;
+    }
+  });
+  document.getElementById('btn-again').addEventListener('click', () => {
+    document.getElementById('inp-birth').value = '';
+    document.getElementById('sel-staff').value = '';
+    document.getElementById('err-msg').style.display = 'none';
+    document.getElementById('btn-area').innerHTML =
+      `<button class="punch-btn btn-disabled" disabled>名前と生年月日を入力してください</button>`;
+    staffId = ''; verifiedName = '';
+    clearInterval(elapsedTimer);
+    show('card-form');
+  });
+
+  show('card-form');
+}
+
+init();
+</script>
+</body>
+</html>

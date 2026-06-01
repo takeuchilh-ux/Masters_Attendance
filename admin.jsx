@@ -669,7 +669,8 @@ function StaffEditModal({ staff: s, offices, onClose, onSave }) {
     name:        s.name        || '',
     office_id:   s.office_id   || offices[0]?.id,
     role:        s.role        || 'staff',
-    ic_card_idm: s.ic_card_idm || '',
+    birth_mmdd:  s.birth_mmdd  || '',
+    email:       s.email       || '',
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -682,7 +683,7 @@ function StaffEditModal({ staff: s, offices, onClose, onSave }) {
         </div>
         <div className="modal-body">
           <div className="form-row2">
-            <label className="field"><span>氏名</span><input value={form.name} onChange={e => set('name', e.target.value)} /></label>
+            <label className="field"><span>氏名</span><input value={form.name} onChange={e => set('name', e.target.value)} autoFocus /></label>
             <label className="field"><span>権限</span>
               <select value={form.role} onChange={e => set('role', e.target.value)}>
                 <option value="staff">一般</option>
@@ -696,10 +697,18 @@ function StaffEditModal({ staff: s, offices, onClose, onSave }) {
               {offices.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
             </select>
           </label>
-          <label className="field">
-            <span>IC Card IDm（フェリカ）</span>
-            <input className="mono" value={form.ic_card_idm} onChange={e => set('ic_card_idm', e.target.value)} placeholder="01 23 45 67 89 AB CD EF" />
-          </label>
+          <div className="form-row2">
+            <label className="field">
+              <span>生年月日（月日4桁）※打刻用</span>
+              <input className="mono" value={form.birth_mmdd}
+                onChange={e => set('birth_mmdd', e.target.value.replace(/\D/g,'').slice(0,4))}
+                placeholder="0415" maxLength={4} />
+            </label>
+            <label className="field">
+              <span>メールアドレス（ログイン用）</span>
+              <input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="任意" />
+            </label>
+          </div>
         </div>
         <div className="modal-foot">
           <button className="btn-ghost" onClick={onClose}>キャンセル</button>
@@ -789,74 +798,84 @@ function AlertsPage() {
 }
 
 // ============================================================
-// OfficesPage - 事業所登録・管理
+// OfficesPage - 事業所管理（住所・位置情報・QR）
 // ============================================================
 function OfficesPage() {
   const { offices, setOffices, showToast } = useContextA(AppCtx);
-  const [editing, setEditing] = useStateA(null); // null = 非表示, {} = 新規, {id,...} = 編集
+  const [editing,  setEditing]  = useStateA(null);
+  const [qrOffice, setQrOffice] = useStateA(null);
+  const [geocoding, setGeocoding] = useStateA(false);
 
   async function saveOffice(form) {
+    const payload = {
+      name:      form.name,
+      address:   form.address   || null,
+      latitude:  form.latitude  ? parseFloat(form.latitude)  : null,
+      longitude: form.longitude ? parseFloat(form.longitude) : null,
+    };
     if (form.id) {
-      const { id, ...rest } = form;
-      const { error } = await mdb('offices').update(rest).eq('id', id);
+      const { error } = await mdb('offices').update(payload).eq('id', form.id);
       if (!error) {
-        setOffices(os => os.map(o => o.id === id ? { ...o, ...rest } : o));
+        setOffices(os => os.map(o => o.id === form.id ? { ...o, ...payload } : o));
         showToast('事業所を更新しました');
-      } else {
-        showToast('更新に失敗しました', 'error');
-      }
+      } else { showToast('更新に失敗しました', 'error'); }
     } else {
-      const { data, error } = await mdb('offices').insert({ name: form.name }).select().single();
+      const { data, error } = await mdb('offices').insert(payload).select().single();
       if (!error && data) {
         setOffices(os => [...os, data].sort((a, b) => a.name.localeCompare(b.name, 'ja')));
         showToast('事業所を登録しました');
-      } else {
-        showToast('登録に失敗しました', 'error');
-      }
+      } else { showToast('登録に失敗しました', 'error'); }
     }
     setEditing(null);
+  }
+
+  async function geocode(address, form, setForm) {
+    if (!address.trim()) return;
+    setGeocoding(true);
+    try {
+      const res  = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`, { headers: { 'Accept-Language': 'ja' } });
+      const data = await res.json();
+      if (data.length > 0) {
+        setForm(f => ({ ...f, latitude: parseFloat(data[0].lat).toFixed(6), longitude: parseFloat(data[0].lon).toFixed(6) }));
+        showToast('位置情報を取得しました');
+      } else { showToast('住所が見つかりませんでした', 'error'); }
+    } catch { showToast('位置情報の取得に失敗しました', 'error'); }
+    setGeocoding(false);
   }
 
   async function deleteOffice(id) {
     if (!confirm('この事業所を削除しますか？\n※所属スタッフがいる場合は削除できません')) return;
     const { error } = await mdb('offices').delete().eq('id', id);
-    if (!error) {
-      setOffices(os => os.filter(o => o.id !== id));
-      showToast('事業所を削除しました');
-    } else {
-      showToast('削除できません（所属スタッフが存在します）', 'error');
-    }
+    if (!error) { setOffices(os => os.filter(o => o.id !== id)); showToast('事業所を削除しました'); }
+    else { showToast('削除できません（所属スタッフが存在します）', 'error'); }
   }
 
   return (
     <div className="stack">
       <div className="page-head">
-        <div>
-          <h1>事業所登録</h1>
-          <p className="muted">全{offices.length}事業所を管理します</p>
-        </div>
+        <div><h1>事業所管理</h1><p className="muted">全{offices.length}事業所</p></div>
         <div className="actions">
           <button className="btn-primary" onClick={() => setEditing({})}>＋ 事業所登録</button>
         </div>
       </div>
-
       <div className="card">
         <table className="sheet">
           <thead><tr>
-            <th className="rownum"></th>
-            <th>事業所名</th>
-            <th>登録日</th>
-            <th>操作</th>
+            <th className="rownum"></th><th>事業所名</th><th>住所</th><th>位置情報</th><th>操作</th>
           </tr></thead>
           <tbody>
-            {offices.length === 0 && <tr><td colSpan={4} className="empty">事業所がありません</td></tr>}
+            {offices.length === 0 && <tr><td colSpan={5} className="empty">事業所がありません</td></tr>}
             {offices.map((o, i) => (
               <tr key={o.id}>
-                <td className="rownum">{i + 1}</td>
+                <td className="rownum">{i+1}</td>
                 <td><strong>{o.name}</strong></td>
-                <td className="mono">{o.created_at?.slice(0, 10) || '—'}</td>
+                <td style={{ fontSize:12 }}>{o.address || <span className="muted">未設定</span>}</td>
+                <td className="center">
+                  {o.latitude ? <span className="pill done">設定済み</span> : <span className="pill warn">未設定</span>}
+                </td>
                 <td>
                   <button className="btn-mini" onClick={() => setEditing(o)}>編集</button>
+                  <button className="btn-mini" onClick={() => setQrOffice(o)}>📲 QR</button>
                   <button className="btn-mini danger" onClick={() => deleteOffice(o.id)}>削除</button>
                 </td>
               </tr>
@@ -866,30 +885,292 @@ function OfficesPage() {
         <div className="sheet-foot">{offices.length}件</div>
       </div>
 
+      {/* 編集モーダル */}
       {editing !== null && (
-        <div className="modal-bg" onClick={() => setEditing(null)}>
-          <div className="modal" style={{ width: 400 }} onClick={e => e.stopPropagation()}>
+        <OfficeEditModal
+          office={editing}
+          geocoding={geocoding}
+          onGeocode={geocode}
+          onClose={() => setEditing(null)}
+          onSave={saveOffice}
+        />
+      )}
+
+      {/* QRモーダル */}
+      {qrOffice && <OfficeQRModal office={qrOffice} onClose={() => setQrOffice(null)} />}
+    </div>
+  );
+}
+
+function OfficeEditModal({ office, geocoding, onGeocode, onClose, onSave }) {
+  const [form, setForm] = useStateA({
+    id:        office.id,
+    name:      office.name      || '',
+    address:   office.address   || '',
+    latitude:  office.latitude  || '',
+    longitude: office.longitude || '',
+  });
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="modal" style={{ width: 520 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <h3>{office.id ? '事業所編集' : '事業所登録'}</h3>
+          <button className="x" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          <label className="field"><span>事業所名</span>
+            <input autoFocus value={form.name} onChange={e => set('name', e.target.value)} placeholder="例: 藤沢事業所" />
+          </label>
+          <div className="form-section-label">打刻位置制限（100m以内）</div>
+          <label className="field"><span>住所</span>
+            <div style={{ display:'flex', gap:8 }}>
+              <input value={form.address} onChange={e => set('address', e.target.value)} placeholder="例: 神奈川県藤沢市..." style={{ flex:1 }} />
+              <button className="btn-ghost" style={{ whiteSpace:'nowrap' }}
+                onClick={() => onGeocode(form.address, form, setForm)}
+                disabled={geocoding}>
+                {geocoding ? '取得中...' : '📍 位置取得'}
+              </button>
+            </div>
+          </label>
+          <div className="form-row2">
+            <label className="field"><span>緯度</span>
+              <input className="mono" value={form.latitude}  onChange={e => set('latitude',  e.target.value)} placeholder="35.336..." />
+            </label>
+            <label className="field"><span>経度</span>
+              <input className="mono" value={form.longitude} onChange={e => set('longitude', e.target.value)} placeholder="139.487..." />
+            </label>
+          </div>
+          {!form.latitude && (
+            <div style={{ fontSize:12, color:'var(--warn)', background:'var(--warn-soft)', padding:'8px 12px', borderRadius:6 }}>
+              ⚠️ 位置情報未設定の場合、スタッフは場所を問わず打刻できます
+            </div>
+          )}
+        </div>
+        <div className="modal-foot">
+          <button className="btn-ghost" onClick={onClose}>キャンセル</button>
+          <button className="btn-primary" onClick={() => { if (form.name.trim()) onSave(form); }}>保存</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OfficeQRModal({ office, onClose }) {
+  const punchUrl = `${location.origin}/punch.html?o=${office.id}`;
+
+  useEffectA(() => {
+    if (window.QRCode) {
+      const el = document.getElementById('admin-qr-canvas');
+      if (el) { el.innerHTML = ''; new window.QRCode(el, { text: punchUrl, width: 200, height: 200 }); }
+    }
+  }, [punchUrl]);
+
+  function printQR() {
+    const w = window.open('', '_blank');
+    w.document.write(`<html><head><title>QR - ${office.name}</title>
+      <style>body{font-family:sans-serif;text-align:center;padding:40px;}h2{margin-bottom:8px;}p{color:#64748b;font-size:14px;}.url{font-size:11px;color:#94a3b8;margin-top:12px;word-break:break-all;}</style>
+      </head><body>
+      <h2>${office.name}</h2><p>出勤・退勤 共通QRコード</p>
+      <div id="qr"></div>
+      <div class="url">${punchUrl}</div>
+      <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+      <script>new QRCode(document.getElementById('qr'),{text:'${punchUrl}',width:240,height:240});setTimeout(()=>window.print(),800);</script>
+      </body></html>`);
+    w.document.close();
+  }
+
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="modal" style={{ width:480 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <h3>{office.name} — QRコード</h3>
+          <button className="x" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body" style={{ alignItems:'center' }}>
+          <div style={{ textAlign:'center', marginBottom:8 }}>
+            <div className="muted small" style={{ marginBottom:12 }}>出勤・退勤 共通QRコード</div>
+            <div id="admin-qr-canvas" style={{ display:'inline-block', border:'1px solid var(--line)', borderRadius:8, padding:12, background:'#fff' }}>
+              {!window.QRCode && <div style={{ width:200, height:200, display:'grid', placeItems:'center', color:'var(--muted)', fontSize:12 }}>生成中...</div>}
+            </div>
+          </div>
+          <div style={{ fontSize:11, color:'var(--muted)', wordBreak:'break-all', textAlign:'center', maxWidth:340 }}>{punchUrl}</div>
+          <div className="hint" style={{ textAlign:'center', lineHeight:1.7 }}>
+            シールに印刷して事業所に貼り付けてください。<br/>スタッフがスマホで読み取ると打刻画面が開きます。
+          </div>
+        </div>
+        <div className="modal-foot">
+          <button className="btn-ghost" onClick={onClose}>閉じる</button>
+          <button className="btn-primary" onClick={printQR}>🖨 印刷</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// AccountsPage - アカウント管理（本部のみ）
+// ============================================================
+function AccountsPage() {
+  const { offices, staff, setStaff, showToast } = useContextA(AppCtx);
+  const [creating,  setCreating]  = useStateA(false);
+  const [pwTarget,  setPwTarget]  = useStateA(null); // PW変更対象staff
+  const [form,      setForm]      = useStateA({ name:'', email:'', password:'', office_id:'', role:'office_manager' });
+  const [pwForm,    setPwForm]    = useStateA({ new_password:'' });
+  const [busy,      setBusy]      = useStateA(false);
+
+  const managed = useMemoA(() =>
+    staff.filter(s => s.role === 'office_manager' || s.role === 'admin').sort((a,b) => a.name.localeCompare(b.name,'ja')),
+    [staff]);
+
+  const set   = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const setPw = (k, v) => setPwForm(f => ({ ...f, [k]: v }));
+
+  async function callEdge(body) {
+    const { data: { session } } = await supa.auth.getSession();
+    const res = await fetch(EDGE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'Authorization': `Bearer ${session.access_token}` },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json();
+    if (!res.ok || json.error) throw new Error(json.error || '処理に失敗しました');
+    return json;
+  }
+
+  async function createAccount() {
+    if (!form.name.trim() || !form.email.trim() || !form.password || !form.office_id) {
+      showToast('全項目を入力してください', 'error'); return;
+    }
+    setBusy(true);
+    try {
+      await callEdge({ action:'create_user', ...form });
+      const { data } = await mdb('staff').select('*').eq('email', form.email).single();
+      if (data) setStaff(ss => [...ss.filter(s => s.email !== form.email), data]);
+      showToast('アカウントを作成しました');
+      setCreating(false);
+      setForm({ name:'', email:'', password:'', office_id:'', role:'office_manager' });
+    } catch(e) { showToast(e.message, 'error'); }
+    setBusy(false);
+  }
+
+  async function changePassword() {
+    if (!pwForm.new_password) return;
+    setBusy(true);
+    try {
+      await callEdge({ action:'change_password', target_email: pwTarget.email, new_password: pwForm.new_password });
+      showToast('パスワードを変更しました');
+      setPwTarget(null); setPwForm({ new_password:'' });
+    } catch(e) { showToast(e.message, 'error'); }
+    setBusy(false);
+  }
+
+  const ROLE_LABELS = { office_manager:'事業所責任者', admin:'本部' };
+
+  return (
+    <div className="stack">
+      <div className="page-head">
+        <div><h1>アカウント管理</h1><p className="muted">事業所責任者・本部のログインアカウントを管理します</p></div>
+        <div className="actions">
+          <button className="btn-primary" onClick={() => setCreating(true)}>＋ アカウント発行</button>
+        </div>
+      </div>
+      <div className="card">
+        <table className="sheet">
+          <thead><tr>
+            <th className="rownum"></th><th>氏名</th><th>メールアドレス</th>
+            <th>権限</th><th>事業所</th><th>操作</th>
+          </tr></thead>
+          <tbody>
+            {managed.length === 0 && <tr><td colSpan={6} className="empty">アカウントがありません</td></tr>}
+            {managed.map((s, i) => {
+              const office = offices.find(o => o.id === s.office_id);
+              return (
+                <tr key={s.id}>
+                  <td className="rownum">{i+1}</td>
+                  <td><strong>{s.name}</strong></td>
+                  <td className="mono" style={{ fontSize:12 }}>{s.email || <span className="muted">—</span>}</td>
+                  <td><span className="pill role-full">{ROLE_LABELS[s.role] || s.role}</span></td>
+                  <td>{office?.name || '—'}</td>
+                  <td>
+                    <button className="btn-mini" onClick={() => { setPwTarget(s); setPwForm({ new_password:'' }); }}>
+                      🔑 PW変更
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div className="sheet-foot">{managed.length}件</div>
+      </div>
+
+      {/* アカウント作成モーダル */}
+      {creating && (
+        <div className="modal-bg" onClick={() => setCreating(false)}>
+          <div className="modal" style={{ width:500 }} onClick={e => e.stopPropagation()}>
             <div className="modal-head">
-              <h3>{editing.id ? '事業所編集' : '事業所登録'}</h3>
-              <button className="x" onClick={() => setEditing(null)}>×</button>
+              <h3>アカウント発行</h3>
+              <button className="x" onClick={() => setCreating(false)}>×</button>
             </div>
             <div className="modal-body">
-              <label className="field">
-                <span>事業所名</span>
-                <input
-                  autoFocus
-                  value={editing.name || ''}
-                  onChange={e => setEditing(f => ({ ...f, name: e.target.value }))}
-                  placeholder="例: 藤沢事業所"
-                />
+              <div className="form-row2">
+                <label className="field"><span>氏名</span>
+                  <input value={form.name} onChange={e => set('name', e.target.value)} autoFocus />
+                </label>
+                <label className="field"><span>権限</span>
+                  <select value={form.role} onChange={e => set('role', e.target.value)}>
+                    <option value="office_manager">事業所責任者</option>
+                    <option value="admin">本部</option>
+                  </select>
+                </label>
+              </div>
+              <label className="field"><span>所属事業所</span>
+                <select value={form.office_id} onChange={e => set('office_id', e.target.value)}>
+                  <option value="">選択してください</option>
+                  {offices.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                </select>
+              </label>
+              <label className="field"><span>メールアドレス</span>
+                <input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="manager@example.com" />
+              </label>
+              <label className="field"><span>仮パスワード</span>
+                <input type="text" className="mono" value={form.password} onChange={e => set('password', e.target.value)} placeholder="8文字以上" />
+                <span className="hint">本人にパスワードをお伝えください</span>
               </label>
             </div>
             <div className="modal-foot">
-              <button className="btn-ghost" onClick={() => setEditing(null)}>キャンセル</button>
-              <button
-                className="btn-primary"
-                onClick={() => { if (editing.name?.trim()) saveOffice(editing); }}
-              >保存</button>
+              <button className="btn-ghost" onClick={() => setCreating(false)}>キャンセル</button>
+              <button className="btn-primary" onClick={createAccount} disabled={busy}>
+                {busy ? '作成中...' : 'アカウント作成'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* パスワード変更モーダル */}
+      {pwTarget && (
+        <div className="modal-bg" onClick={() => setPwTarget(null)}>
+          <div className="modal" style={{ width:400 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-head">
+              <h3>{pwTarget.name} のパスワード変更</h3>
+              <button className="x" onClick={() => setPwTarget(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <label className="field"><span>新しいパスワード</span>
+                <input type="text" className="mono" value={pwForm.new_password}
+                  onChange={e => setPw('new_password', e.target.value)}
+                  placeholder="8文字以上" autoFocus />
+                <span className="hint">本人にパスワードをお伝えください</span>
+              </label>
+            </div>
+            <div className="modal-foot">
+              <button className="btn-ghost" onClick={() => setPwTarget(null)}>キャンセル</button>
+              <button className="btn-primary" onClick={changePassword} disabled={busy || !pwForm.new_password}>
+                {busy ? '変更中...' : '変更する'}
+              </button>
             </div>
           </div>
         </div>
@@ -898,4 +1179,4 @@ function OfficesPage() {
   );
 }
 
-Object.assign(window, { DashboardPage, RequestsViewPage, TouchLogPage, MonthlyPage, StaffAdminPage, AlertsPage, OfficesPage });
+Object.assign(window, { DashboardPage, RequestsViewPage, TouchLogPage, MonthlyPage, StaffAdminPage, AlertsPage, OfficesPage, AccountsPage });

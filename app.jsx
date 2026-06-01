@@ -1,31 +1,29 @@
 // ============================================================
-// MasuTa! 本部管理画面 - メインアプリ
+// MasuTa! - メインアプリ（ロール振り分け）
 // ============================================================
 
 const { useState, useEffect, useMemo, createContext, useContext } = React;
 
 // ============================================================
 // Supabase クライアント
-// ※ SUPABASE_ANON は "anon（公開）キー" のため、フロントエンドに含めて問題なし
 // ============================================================
 const SUPABASE_URL  = 'https://dzwsdmcffrubjimnrfyf.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR6d3NkbWNmZnJ1YmppbW5yZnlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3MjkxODAsImV4cCI6MjA5NDMwNTE4MH0.VXEGijG64gi9TMWDhrvZE6qcs0ZnArbZRrquGbpN-Kg';
 const supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+const mdb  = (table) => supa.schema('masuta').from(table);
 
-// masuta スキーマへのショートカット
-const mdb = (table) => supa.schema('masuta').from(table);
+const EDGE_URL = `${SUPABASE_URL}/functions/v1/manage-user`;
 
 // ============================================================
-// 定数（シークレットは一切含まない）
+// 定数
 // ============================================================
 const REQUEST_TYPE_LABELS = {
-  late:             '遅刻',
-  early_leave:      '早退',
-  paid_leave_full:  '有給（全日）',
-  paid_leave_am:    '有給（午前半日）',
-  paid_leave_pm:    '有給（午後半日）',
+  late:            '遅刻',
+  early_leave:     '早退',
+  paid_leave_full: '有給（全日）',
+  paid_leave_am:   '有給（午前半日）',
+  paid_leave_pm:   '有給（午後半日）',
 };
-
 const STATUS_LABELS = {
   pending:  '承認待ち',
   approved: '承認済み',
@@ -33,7 +31,7 @@ const STATUS_LABELS = {
 };
 
 // ============================================================
-// AppContext
+// AppContext（本部用）
 // ============================================================
 const AppCtx = createContext(null);
 
@@ -61,7 +59,7 @@ function AppProvider({ children }) {
       if (alertRes.data) setAlerts(alertRes.data);
       setDbStatus('ok');
     } catch (e) {
-      console.error('DB load error:', e);
+      console.error(e);
       setDbStatus('error');
     }
   }
@@ -77,15 +75,9 @@ function AppProvider({ children }) {
 
   return (
     <AppCtx.Provider value={{
-      offices, setOffices,
-      staff, setStaff,
-      shiftTypes, setShiftTypes,
-      alerts, setAlerts,
-      unreadAlerts,
-      dbStatus,
-      showToast,
-      reload: loadMaster,
-      mdb,
+      offices, setOffices, staff, setStaff,
+      shiftTypes, setShiftTypes, alerts, setAlerts,
+      unreadAlerts, dbStatus, showToast, reload: loadMaster, mdb,
     }}>
       {children}
       {toast && <Toast {...toast} />}
@@ -94,42 +86,94 @@ function AppProvider({ children }) {
 }
 
 // ============================================================
-// App（Supabase Auth セッション管理）
+// App（ルート）
 // ============================================================
 function App() {
-  const [auth,    setAuth]    = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [session,  setSession]  = useState(null);
+  const [profile,  setProfile]  = useState(null); // masuta.staff レコード
+  const [loading,  setLoading]  = useState(true);
+  const [noProfile, setNoProfile] = useState(false);
+
+  async function loadProfile(email) {
+    const { data } = await mdb('staff')
+      .select('*')
+      .eq('email', email)
+      .eq('is_active', true)
+      .maybeSingle();
+    return data;
+  }
 
   useEffect(() => {
-    // 初回: 既存セッション確認
-    supa.auth.getSession().then(({ data: { session } }) => {
-      setAuth(session ? { role: 'admin', name: '本部' } : null);
+    supa.auth.getSession().then(async ({ data: { session } }) => {
+      setSession(session);
+      if (session) {
+        const p = await loadProfile(session.user.email);
+        setProfile(p);
+        if (!p) setNoProfile(true);
+      }
       setLoading(false);
     });
-    // セッション変化を監視（ログイン/ログアウト自動反映）
-    const { data: { subscription } } = supa.auth.onAuthStateChange((_event, session) => {
-      setAuth(session ? { role: 'admin', name: '本部' } : null);
+
+    const { data: { subscription } } = supa.auth.onAuthStateChange(async (_, session) => {
+      setSession(session);
+      if (session) {
+        const p = await loadProfile(session.user.email);
+        setProfile(p);
+        setNoProfile(!p);
+      } else {
+        setProfile(null);
+        setNoProfile(false);
+      }
     });
     return () => subscription.unsubscribe();
   }, []);
 
-  if (loading) {
-    return (
-      <div className="login-bg" style={{ display: 'grid', placeItems: 'center' }}>
-        <span className="muted">読み込み中...</span>
+  if (loading) return (
+    <div style={{ height:'100vh', display:'grid', placeItems:'center', background:'#f1f5f9' }}>
+      <span style={{ color:'#64748b' }}>読み込み中...</span>
+    </div>
+  );
+
+  if (!session) return <Login />;
+
+  if (noProfile) return (
+    <div style={{ height:'100vh', display:'grid', placeItems:'center', background:'#f1f5f9', padding:24 }}>
+      <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:12, padding:'32px 28px', textAlign:'center', maxWidth:380 }}>
+        <div style={{ fontSize:40, marginBottom:16 }}>🔒</div>
+        <h2 style={{ margin:'0 0 10px', fontSize:18 }}>アカウントが設定されていません</h2>
+        <p style={{ color:'#64748b', fontSize:14, lineHeight:1.7, marginBottom:24 }}>
+          このメールアドレスにはアカウントが紐づいていません。<br />
+          本部にアカウントの設定を依頼してください。
+        </p>
+        <button className="btn-ghost" onClick={() => supa.auth.signOut()}>ログアウト</button>
       </div>
+    </div>
+  );
+
+  if (profile?.role === 'admin') {
+    return (
+      <AppProvider>
+        <AdminShell profile={profile} />
+      </AppProvider>
     );
   }
 
+  if (profile?.role === 'office_manager') {
+    return <OfficeShell profile={profile} />;
+  }
+
   return (
-    <AppProvider>
-      {auth ? <Shell auth={auth} /> : <Login />}
-    </AppProvider>
+    <div style={{ height:'100vh', display:'grid', placeItems:'center', background:'#f1f5f9' }}>
+      <div style={{ textAlign:'center', padding:24 }}>
+        <p style={{ color:'#64748b', marginBottom:16 }}>このアカウントではアクセスできません。</p>
+        <button className="btn-ghost" onClick={() => supa.auth.signOut()}>ログアウト</button>
+      </div>
+    </div>
   );
 }
 
 // ============================================================
-// Login（Supabase Auth: メール＋パスワード）
+// Login
 // ============================================================
 function Login() {
   const [email,   setEmail]   = useState('');
@@ -139,14 +183,10 @@ function Login() {
 
   async function submit(e) {
     e.preventDefault();
-    setErr('');
-    setLoading(true);
+    setErr(''); setLoading(true);
     const { error } = await supa.auth.signInWithPassword({ email, password: pw });
     setLoading(false);
-    if (error) {
-      setErr('メールアドレスまたはパスワードが違います');
-    }
-    // 成功時は onAuthStateChange が App のセッションを自動更新
+    if (error) setErr('メールアドレスまたはパスワードが違います');
   }
 
   return (
@@ -155,28 +195,20 @@ function Login() {
         <div className="login-head">
           <div className="brand-square big">M</div>
           <h1>MasuTa!</h1>
-          <p className="muted">本部ログイン</p>
+          <p className="muted">ログイン</p>
         </div>
         <form onSubmit={submit} className="login-form">
           <label className="field">
             <span>メールアドレス</span>
-            <input
-              type="email"
-              value={email}
+            <input type="email" value={email} autoFocus
               onChange={e => { setEmail(e.target.value); setErr(''); }}
-              placeholder="admin@example.com"
-              autoFocus
-            />
+              placeholder="email@example.com" />
           </label>
           <label className="field">
             <span>パスワード</span>
-            <input
-              className="mono"
-              type="password"
-              value={pw}
+            <input type="password" className="mono" value={pw}
               onChange={e => { setPw(e.target.value); setErr(''); }}
-              placeholder="••••••••"
-            />
+              placeholder="••••••••" />
           </label>
           {err && <div className="err">{err}</div>}
           <button className="btn-primary big" type="submit" disabled={loading}>
@@ -190,9 +222,9 @@ function Login() {
 }
 
 // ============================================================
-// Shell
+// AdminShell（本部用シェル）
 // ============================================================
-function Shell({ auth }) {
+function AdminShell({ profile }) {
   const [route, setRoute] = useState('dashboard');
   const { dbStatus, unreadAlerts } = useContext(AppCtx);
 
@@ -204,12 +236,9 @@ function Shell({ auth }) {
     { id: 'touchlog',  label: 'タッチログ',      icon: '🔍' },
     { id: 'staff',     label: 'スタッフ管理',    icon: '👥' },
     { id: 'alerts',    label: 'アラート',        icon: '🔔', badge: unreadAlerts },
-    { id: 'offices',   label: '事業所登録',      icon: '🏢' },
+    { id: 'offices',   label: '事業所管理',      icon: '🏢' },
+    { id: 'accounts',  label: 'アカウント管理',  icon: '🔑' },
   ];
-
-  function logout() {
-    supa.auth.signOut(); // onAuthStateChange が auth を null にする
-  }
 
   return (
     <div className="shell">
@@ -218,24 +247,20 @@ function Shell({ auth }) {
           <div className="brand-square">M</div>
           <div className="brand-title">
             <strong>MasuTa!</strong>
-            <span>管理者パネル</span>
+            <span>本部管理パネル</span>
           </div>
         </div>
-
         <nav className="nav">
           {navItems.map(it => (
-            <button
-              key={it.id}
+            <button key={it.id}
               className={`nav-item ${route === it.id ? 'active' : ''}`}
-              onClick={() => setRoute(it.id)}
-            >
+              onClick={() => setRoute(it.id)}>
               <span className="nav-ic">{it.icon}</span>
               <span>{it.label}</span>
               {it.badge > 0 && <span className="nav-badge">{it.badge}</span>}
             </button>
           ))}
         </nav>
-
         <div className="side-foot">
           <div className="user">
             <div className="user-av">本</div>
@@ -244,35 +269,30 @@ function Shell({ auth }) {
               <span>全事業所</span>
             </div>
           </div>
-          <span
-            title={dbStatus === 'ok' ? 'DB接続中' : dbStatus === 'error' ? 'DB接続エラー' : '接続中...'}
-            style={{ fontSize: 16, lineHeight: 1 }}
-          >
+          <span title={dbStatus === 'ok' ? 'DB接続中' : 'DB接続エラー'} style={{ fontSize:16, lineHeight:1 }}>
             {dbStatus === 'ok' ? '🟢' : dbStatus === 'error' ? '🔴' : '🟡'}
           </span>
-          <button className="btn-ghost" onClick={logout}>ログアウト</button>
+          <button className="btn-ghost" onClick={() => supa.auth.signOut()}>ログアウト</button>
         </div>
       </aside>
-
       <main className="main">
         <header className="topbar">
           <div className="crumbs">
-            <span>MasuTa!</span>
-            <span className="sep">／</span>
+            <span>MasuTa!</span><span className="sep">／</span>
             <strong>{navItems.find(n => n.id === route)?.label}</strong>
           </div>
           <div className="topbar-right"></div>
         </header>
-
         <div className="page">
           {route === 'dashboard' && <DashboardPage />}
-          {route === 'shift'     && <ShiftPage auth={auth} />}
+          {route === 'shift'     && <ShiftPage />}
           {route === 'requests'  && <RequestsViewPage />}
           {route === 'monthly'   && <MonthlyPage />}
           {route === 'touchlog'  && <TouchLogPage />}
           {route === 'staff'     && <StaffAdminPage />}
           {route === 'alerts'    && <AlertsPage />}
           {route === 'offices'   && <OfficesPage />}
+          {route === 'accounts'  && <AccountsPage />}
         </div>
       </main>
     </div>
@@ -287,4 +307,4 @@ function Toast({ msg, kind }) {
 }
 
 // グローバル公開
-Object.assign(window, { App, AppCtx, mdb, REQUEST_TYPE_LABELS, STATUS_LABELS });
+Object.assign(window, { App, AppCtx, mdb, supa, EDGE_URL, REQUEST_TYPE_LABELS, STATUS_LABELS });
