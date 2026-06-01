@@ -936,27 +936,46 @@ function OfficeEditModal({ office, geocoding, onGeocode, onClose, onSave }) {
             <input autoFocus value={form.name} onChange={e => set('name', e.target.value)} placeholder="例: 藤沢事業所" />
           </label>
           <div className="form-section-label">打刻位置制限（100m以内）</div>
-          <label className="field"><span>住所</span>
-            <div style={{ display:'flex', gap:8 }}>
-              <input value={form.address} onChange={e => set('address', e.target.value)} placeholder="例: 神奈川県藤沢市..." style={{ flex:1 }} />
-              <button className="btn-ghost" style={{ whiteSpace:'nowrap' }}
-                onClick={() => onGeocode(form.address, form, setForm)}
-                disabled={geocoding}>
-                {geocoding ? '取得中...' : '📍 位置取得'}
-              </button>
-            </div>
+
+          {/* ① 住所入力 */}
+          <label className="field">
+            <span>住所（番地まで入力すると精度が上がります）</span>
+            <input
+              value={form.address}
+              onChange={e => set('address', e.target.value)}
+              placeholder="例: 神奈川県藤沢市辻堂神台2-2-1"
+            />
           </label>
+
+          {/* ② 位置取得ボタン */}
+          <button
+            className="btn-ghost"
+            style={{ width:'100%', marginBottom:12 }}
+            onClick={() => onGeocode(form.address, form, setForm)}
+            disabled={geocoding || !form.address.trim()}>
+            {geocoding ? '⏳ 取得中...' : '📍 住所から緯度経度を自動取得'}
+          </button>
+
+          {/* ③ 緯度経度（自動入力 or 手動入力） */}
           <div className="form-row2">
-            <label className="field"><span>緯度</span>
+            <label className="field">
+              <span>緯度（自動入力されます）</span>
               <input className="mono" value={form.latitude}  onChange={e => set('latitude',  e.target.value)} placeholder="35.336..." />
             </label>
-            <label className="field"><span>経度</span>
+            <label className="field">
+              <span>経度（自動入力されます）</span>
               <input className="mono" value={form.longitude} onChange={e => set('longitude', e.target.value)} placeholder="139.487..." />
             </label>
           </div>
+
+          {form.latitude && form.longitude && (
+            <div style={{ fontSize:12, color:'var(--ok)', background:'var(--ok-soft)', padding:'8px 12px', borderRadius:6 }}>
+              ✅ 位置情報設定済み — スタッフは事業所から100m以内でのみ打刻できます
+            </div>
+          )}
           {!form.latitude && (
             <div style={{ fontSize:12, color:'var(--warn)', background:'var(--warn-soft)', padding:'8px 12px', borderRadius:6 }}>
-              ⚠️ 位置情報未設定の場合、スタッフは場所を問わず打刻できます
+              ⚠️ 位置情報未設定 — 場所を問わず打刻できてしまいます
             </div>
           )}
         </div>
