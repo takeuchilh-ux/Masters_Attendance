@@ -833,13 +833,25 @@ function OfficesPage() {
     if (!address.trim()) return;
     setGeocoding(true);
     try {
-      const res  = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`, { headers: { 'Accept-Language': 'ja' } });
+      // Nominatim: email パラメータで識別（User-Agentの代替）
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1&accept-language=ja&email=masuta-app@example.com`;
+      const res  = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (data.length > 0) {
-        setForm(f => ({ ...f, latitude: parseFloat(data[0].lat).toFixed(6), longitude: parseFloat(data[0].lon).toFixed(6) }));
-        showToast('位置情報を取得しました');
-      } else { showToast('住所が見つかりませんでした', 'error'); }
-    } catch { showToast('位置情報の取得に失敗しました', 'error'); }
+        setForm(f => ({
+          ...f,
+          latitude:  parseFloat(data[0].lat).toFixed(6),
+          longitude: parseFloat(data[0].lon).toFixed(6),
+        }));
+        showToast(`位置情報を取得しました（${data[0].display_name.slice(0, 30)}...）`);
+      } else {
+        showToast('住所が見つかりませんでした。より具体的な住所を入力してください', 'error');
+      }
+    } catch(e) {
+      console.error('Geocode error:', e);
+      showToast('位置情報の取得に失敗しました。住所を確認してください', 'error');
+    }
     setGeocoding(false);
   }
 
