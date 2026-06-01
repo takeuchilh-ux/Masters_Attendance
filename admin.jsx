@@ -833,24 +833,27 @@ function OfficesPage() {
     if (!address.trim()) return;
     setGeocoding(true);
     try {
-      // Nominatim: email パラメータで識別（User-Agentの代替）
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1&accept-language=ja&email=masuta-app@example.com`;
+      // 国土地理院 住所検索API（日本語住所特化・無料・キー不要）
+      const url = `https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(address)}`;
       const res  = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      if (data.length > 0) {
+      if (data && data.length > 0) {
+        // GeoJSON形式: coordinates = [longitude, latitude]
+        const [lon, lat] = data[0].geometry.coordinates;
+        const title = data[0].properties?.title || '';
         setForm(f => ({
           ...f,
-          latitude:  parseFloat(data[0].lat).toFixed(6),
-          longitude: parseFloat(data[0].lon).toFixed(6),
+          latitude:  parseFloat(lat).toFixed(6),
+          longitude: parseFloat(lon).toFixed(6),
         }));
-        showToast(`位置情報を取得しました（${data[0].display_name.slice(0, 30)}...）`);
+        showToast(`✅ 取得完了: ${title}`);
       } else {
-        showToast('住所が見つかりませんでした。より具体的な住所を入力してください', 'error');
+        showToast('住所が見つかりませんでした。都道府県から入力してください', 'error');
       }
     } catch(e) {
       console.error('Geocode error:', e);
-      showToast('位置情報の取得に失敗しました。住所を確認してください', 'error');
+      showToast('位置情報の取得に失敗しました', 'error');
     }
     setGeocoding(false);
   }
