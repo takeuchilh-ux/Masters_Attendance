@@ -104,22 +104,31 @@ function App() {
   }
 
   useEffect(() => {
-    supa.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      if (session) {
-        const p = await loadProfile(session.user.email);
-        setProfile(p);
-        if (!p) setNoProfile(true);
+    async function init() {
+      try {
+        const { data: { session } } = await supa.auth.getSession();
+        setSession(session);
+        if (session) {
+          const p = await loadProfile(session.user.email);
+          setProfile(p);
+          if (!p) setNoProfile(true);
+        }
+      } catch (e) {
+        console.error('Init error:', e);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
-    });
+    }
+    init();
 
     const { data: { subscription } } = supa.auth.onAuthStateChange(async (_, session) => {
       setSession(session);
       if (session) {
-        const p = await loadProfile(session.user.email);
-        setProfile(p);
-        setNoProfile(!p);
+        try {
+          const p = await loadProfile(session.user.email);
+          setProfile(p);
+          setNoProfile(!p);
+        } catch(e) { console.error('Profile load error:', e); }
       } else {
         setProfile(null);
         setNoProfile(false);

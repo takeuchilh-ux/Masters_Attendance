@@ -37,7 +37,7 @@ function OfficeProvider({ officeId, children }) {
   return (
     <OfficeCtx.Provider value={{ officeId, staff, setStaff, shiftTypes, setShiftTypes, showToast, reload: loadMaster, dbStatus }}>
       {children}
-      {toast && <div className={`toast ${kind}`}>{toast.msg}</div>}
+      {toast && <div className={`toast ${toast.kind}`}>{toast.msg}</div>}
     </OfficeCtx.Provider>
   );
 }
