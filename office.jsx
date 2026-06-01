@@ -77,7 +77,7 @@ function OfficeShell({ profile }) {
       <div className="shell">
         <aside className="sidebar">
           <div className="brand">
-            <div className="brand-square">M</div>
+            <img src="logo.png" alt="Masters Staff" style={{ width:36, height:36, objectFit:'contain', background:'#fff', borderRadius:4, padding:2 }} />
             <div className="brand-title">
               <strong>MasuTa!</strong>
               <span>事業所パネル</span>

@@ -202,7 +202,7 @@ function Login() {
     <div className="login-bg">
       <div className="login-card">
         <div className="login-head">
-          <div className="brand-square big">M</div>
+          <img src="logo.png" alt="Masters Staff" style={{ width:80, height:80, objectFit:'contain', margin:'0 auto', display:'block' }} />
           <h1>MasuTa!</h1>
           <p className="muted">ログイン</p>
         </div>
@@ -253,7 +253,7 @@ function AdminShell({ profile }) {
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-square">M</div>
+          <img src="logo.png" alt="Masters Staff" style={{ width:36, height:36, objectFit:'contain', background:'#fff', borderRadius:4, padding:2 }} />
           <div className="brand-title">
             <strong>MasuTa!</strong>
             <span>本部管理パネル</span>
