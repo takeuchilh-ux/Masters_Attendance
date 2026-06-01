@@ -575,7 +575,7 @@ function StaffAdminPage() {
         <table className="sheet">
           <thead><tr>
             <th className="rownum"></th><th>氏名</th><th>事業所</th><th>権限</th>
-            <th>IC Card IDm</th><th>登録日</th><th>操作</th>
+            <th>生年月日</th><th>登録日</th><th>操作</th>
           </tr></thead>
           <tbody>
             {filtered.length === 0 && <tr><td colSpan={7} className="empty">スタッフがいません</td></tr>}
@@ -592,7 +592,7 @@ function StaffAdminPage() {
                   </td>
                   <td>{office?.name || '—'}</td>
                   <td><span className={`pill ${roleColor(s.role)}`}>{ROLE_LABELS[s.role] || s.role}</span></td>
-                  <td className="mono" style={{ fontSize: 11 }}>{s.ic_card_idm || <span className="muted">未登録</span>}</td>
+                  <td className="mono">{s.birth_mmdd || <span className="muted">未登録</span>}</td>
                   <td className="mono">{s.created_at?.slice(0, 10)}</td>
                   <td>
                     <button className="btn-mini" onClick={() => setEditing(s)}>編集</button>
@@ -645,10 +645,10 @@ function StaffDetailModal({ staff: s, offices, onClose, onEdit }) {
               <div className="muted small mono" style={{ marginTop: 4 }}>ID: {s.id}</div>
             </div>
           </div>
-          <div className="form-section-label" style={{ marginTop: 16 }}>フェリカ情報</div>
+          <div className="form-section-label" style={{ marginTop: 16 }}>打刻用パスワード</div>
           <div style={{ fontSize: 13 }}>
-            <span className="muted">IC Card IDm</span><br />
-            <span className="mono">{s.ic_card_idm || '未登録'}</span>
+            <span className="muted">生年月日（月日4桁）</span><br />
+            <span className="mono">{s.birth_mmdd || '未登録'}</span>
           </div>
           <div className="muted small" style={{ marginTop: 16 }}>
             登録日: {s.created_at?.slice(0, 10)}

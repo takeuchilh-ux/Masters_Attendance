@@ -596,7 +596,7 @@ function OfficeStaffPage({ officeId }) {
         <table className="sheet">
           <thead><tr>
             <th className="rownum"></th><th>氏名</th><th>権限</th>
-            <th>生年月日(MMDD)</th><th>操作</th>
+            <th>生年月日（打刻用）</th><th>操作</th>
           </tr></thead>
           <tbody>
             {staff.length === 0 && <tr><td colSpan={5} className="empty">スタッフがいません</td></tr>}
@@ -653,8 +653,8 @@ function OfficeStaffModal({ staff: s, onClose, onSave }) {
               placeholder="0415" maxLength={4} />
           </label>
           <label className="field">
-            <span>メールアドレス（ログイン用・任意）</span>
-            <input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="staff@example.com" />
+            <span>メールアドレス（ログイン用・責任者のみ）</span>
+            <input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="manager@example.com" />
           </label>
         </div>
         <div className="modal-foot">
