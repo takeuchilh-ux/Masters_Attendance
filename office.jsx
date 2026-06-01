@@ -67,7 +67,7 @@ function OfficeShell({ profile }) {
     { id: 'dashboard', label: 'ダッシュボード', icon: '🏠' },
     { id: 'shifts',    label: 'シフト',         icon: '📅' },
     { id: 'requests',  label: '申請承認',        icon: '📝', badge: pendingCnt },
-    { id: 'touchlog',  label: 'タッチログ',      icon: '🔍' },
+    { id: 'touchlog',  label: 'QRログ',           icon: '🔍' },
     { id: 'staff',     label: 'スタッフ管理',    icon: '👥' },
     { id: 'qr',        label: 'QRコード',        icon: '📲' },
   ];

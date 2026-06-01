@@ -242,7 +242,7 @@ function AdminShell({ profile }) {
     { id: 'shift',     label: 'シフト',         icon: '📅' },
     { id: 'requests',  label: '申請一覧',        icon: '📝' },
     { id: 'monthly',   label: '月次集計',        icon: '📊' },
-    { id: 'touchlog',  label: 'タッチログ',      icon: '🔍' },
+    { id: 'touchlog',  label: 'QRログ',           icon: '🔍' },
     { id: 'staff',     label: 'スタッフ管理',    icon: '👥' },
     { id: 'alerts',    label: 'アラート',        icon: '🔔', badge: unreadAlerts },
     { id: 'offices',   label: '事業所管理',      icon: '🏢' },
