@@ -825,27 +825,37 @@ function OfficesPage() {
   const [qrOffice, setQrOffice] = useStateA(null);
   const [geocoding, setGeocoding] = useStateA(false);
 
+  const [saving, setSaving] = useStateA(false);
+
   async function saveOffice(form) {
+    setSaving(true);
     const payload = {
       name:      form.name,
       address:   form.address   || null,
       latitude:  form.latitude  ? parseFloat(form.latitude)  : null,
       longitude: form.longitude ? parseFloat(form.longitude) : null,
     };
-    if (form.id) {
-      const { error } = await mdb('offices').update(payload).eq('id', form.id);
-      if (!error) {
-        setOffices(os => os.map(o => o.id === form.id ? { ...o, ...payload } : o));
-        showToast('事業所を更新しました');
-      } else { showToast('更新に失敗しました', 'error'); }
-    } else {
-      const { data, error } = await mdb('offices').insert(payload).select().single();
-      if (!error && data) {
-        setOffices(os => [...os, data].sort((a, b) => a.name.localeCompare(b.name, 'ja')));
-        showToast('事業所を登録しました');
-      } else { showToast('登録に失敗しました', 'error'); }
+    try {
+      if (form.id) {
+        const { error } = await mdb('offices').update(payload).eq('id', form.id);
+        if (!error) {
+          setOffices(os => os.map(o => o.id === form.id ? { ...o, ...payload } : o));
+          showToast('事業所を更新しました');
+        } else { showToast('更新に失敗しました', 'error'); }
+      } else {
+        const { data, error } = await mdb('offices').insert(payload).select().single();
+        if (!error && data) {
+          setOffices(os => [...os, data].sort((a, b) => a.name.localeCompare(b.name, 'ja')));
+          showToast('事業所を登録しました');
+        } else { showToast('登録に失敗しました', 'error'); }
+      }
+    } catch (e) {
+      console.error('saveOffice error:', e);
+      showToast('保存に失敗しました', 'error');
+    } finally {
+      setSaving(false);
+      setEditing(null);
     }
-    setEditing(null);
   }
 
   async function geocode(address, form, setForm) {
@@ -924,6 +934,7 @@ function OfficesPage() {
         <OfficeEditModal
           office={editing}
           geocoding={geocoding}
+          saving={saving}
           onGeocode={geocode}
           onClose={() => setEditing(null)}
           onSave={saveOffice}
@@ -936,7 +947,7 @@ function OfficesPage() {
   );
 }
 
-function OfficeEditModal({ office, geocoding, onGeocode, onClose, onSave }) {
+function OfficeEditModal({ office, geocoding, saving, onGeocode, onClose, onSave }) {
   const [form, setForm] = useStateA({
     id:        office.id,
     name:      office.name      || '',
@@ -1002,8 +1013,10 @@ function OfficeEditModal({ office, geocoding, onGeocode, onClose, onSave }) {
           )}
         </div>
         <div className="modal-foot">
-          <button className="btn-ghost" onClick={onClose}>キャンセル</button>
-          <button className="btn-primary" onClick={() => { if (form.name.trim()) onSave(form); }}>保存</button>
+          <button className="btn-ghost" onClick={onClose} disabled={saving}>キャンセル</button>
+          <button className="btn-primary" onClick={() => { if (form.name.trim()) onSave(form); }} disabled={saving || !form.name.trim()}>
+            {saving ? '保存中...' : '保存'}
+          </button>
         </div>
       </div>
     </div>
