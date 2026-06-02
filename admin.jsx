@@ -1061,7 +1061,6 @@ function OfficeQRModal({ office, onClose }) {
               {!window.QRCode && <div style={{ width:200, height:200, display:'grid', placeItems:'center', color:'var(--muted)', fontSize:12 }}>生成中...</div>}
             </div>
           </div>
-          <div style={{ fontSize:11, color:'var(--muted)', wordBreak:'break-all', textAlign:'center', maxWidth:340 }}>{punchUrl}</div>
           <div className="hint" style={{ textAlign:'center', lineHeight:1.7 }}>
             シールに印刷して事業所に貼り付けてください。<br/>スタッフがスマホで読み取ると打刻画面が開きます。
           </div>

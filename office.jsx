@@ -740,9 +740,6 @@ function OfficeQRPage({ officeId, officeName }) {
             {!window.QRCode && <div style={{ width:220, height:220, display:'grid', placeItems:'center', color:'var(--muted)', fontSize:13 }}>QRコードを生成中...</div>}
           </div>
         </div>
-        <div style={{ background:'var(--bg2)', border:'1px solid var(--line)', borderRadius:8, padding:'10px 16px', fontSize:12, color:'var(--muted)', wordBreak:'break-all', maxWidth:400, textAlign:'center' }}>
-          {punchUrl}
-        </div>
         <div className="hint" style={{ maxWidth:360, textAlign:'center', lineHeight:1.7 }}>
           このQRコードをシールに印刷して事業所に貼り付けてください。<br />
           スタッフがスマートフォンで読み取ると打刻画面が開きます。
