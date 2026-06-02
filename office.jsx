@@ -499,7 +499,7 @@ function OfficeRequestsPage({ officeId, onCountChange }) {
 }
 
 // ============================================================
-// OfficeTouchLogPage - タッチログ
+// OfficeTouchLogPage - QRログ
 // ============================================================
 function OfficeTouchLogPage({ officeId }) {
   const today = new Date().toISOString().slice(0, 10);
@@ -514,17 +514,39 @@ function OfficeTouchLogPage({ officeId }) {
     const { data } = await mdb('touch_logs').select('*, staff(name)')
       .eq('office_id', officeId)
       .gte('touched_at', `${from}T00:00:00`).lte('touched_at', `${to}T23:59:59`)
-      .order('touched_at', { ascending: false }).limit(500);
+      .order('touched_at', { ascending: true }).limit(1000);
     setLogs(data || []); setLoading(false);
   }
 
   useEffectO(() => { load(); }, [officeId, from, to]);
-  const filtered = useMemoO(() => logs.filter(l => !q || l.staff?.name?.includes(q)), [logs, q]);
+
+  const filtered = useMemoO(() =>
+    logs.filter(l => !q || l.staff?.name?.includes(q)),
+    [logs, q]);
+
+  // 1人1日1行に集約
+  const grouped = useMemoO(() => {
+    const map = {};
+    filtered.forEach(l => {
+      const date = new Date(l.touched_at).toISOString().slice(0, 10);
+      const key  = `${l.staff_id}|${date}`;
+      if (!map[key]) map[key] = {
+        key, date,
+        staffName: l.staff?.name || '—',
+        inTime: null, outTime: null,
+      };
+      const t = new Date(l.touched_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+      if (l.touch_type === 'in'  && !map[key].inTime)  map[key].inTime  = t;
+      if (l.touch_type === 'out')                       map[key].outTime = t;
+    });
+    return Object.values(map).sort((a, b) =>
+      b.date.localeCompare(a.date) || a.staffName.localeCompare(b.staffName, 'ja'));
+  }, [filtered]);
 
   return (
     <div className="stack">
       <div className="page-head">
-        <div><h1>タッチログ</h1></div>
+        <div><h1>QRログ</h1></div>
         <button className="btn-ghost" onClick={load}>🔄 更新</button>
       </div>
       <div className="card">
@@ -541,21 +563,31 @@ function OfficeTouchLogPage({ officeId }) {
           </label>
         </div>
         <table className="sheet">
-          <thead><tr><th className="rownum"></th><th>日時</th><th>スタッフ</th><th>種別</th></tr></thead>
+          <thead><tr>
+            <th className="rownum"></th>
+            <th>日付</th><th>スタッフ</th>
+            <th style={{ textAlign:'center' }}>出勤</th>
+            <th style={{ textAlign:'center' }}>退勤</th>
+          </tr></thead>
           <tbody>
-            {loading && <tr><td colSpan={4} className="empty">読み込み中...</td></tr>}
-            {!loading && filtered.length === 0 && <tr><td colSpan={4} className="empty">ログがありません</td></tr>}
-            {filtered.map((l, i) => (
-              <tr key={l.id}>
+            {loading && <tr><td colSpan={5} className="empty">読み込み中...</td></tr>}
+            {!loading && grouped.length === 0 && <tr><td colSpan={5} className="empty">QRログがありません</td></tr>}
+            {grouped.map((r, i) => (
+              <tr key={r.key}>
                 <td className="rownum">{i+1}</td>
-                <td className="mono">{new Date(l.touched_at).toLocaleString('ja-JP')}</td>
-                <td><strong>{l.staff?.name || <span className="muted small">未登録</span>}</strong></td>
-                <td><span className={`pill ${l.touch_type==='in'?'done':'caution'}`}>{l.touch_type==='in'?'出勤':'退勤'}</span></td>
+                <td className="mono">{r.date}</td>
+                <td><strong>{r.staffName}</strong></td>
+                <td className="mono" style={{ textAlign:'center' }}>
+                  {r.inTime  ? <span className="pill done">{r.inTime}</span>    : <span className="muted">—</span>}
+                </td>
+                <td className="mono" style={{ textAlign:'center' }}>
+                  {r.outTime ? <span className="pill caution">{r.outTime}</span> : <span className="muted">—</span>}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
-        <div className="sheet-foot">{filtered.length}件</div>
+        <div className="sheet-foot">{grouped.length}件</div>
       </div>
     </div>
   );
