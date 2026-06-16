@@ -78,6 +78,22 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ── アカウント削除 ──────────────────────────────────
+    if (action === 'delete_user') {
+      const { target_email } = body;
+
+      const { data: users } = await supabaseAdmin.auth.admin.listUsers();
+      const target = users?.users?.find((u) => u.email === target_email);
+      if (!target) throw new Error('対象ユーザーが見つかりません');
+
+      const { error } = await supabaseAdmin.auth.admin.deleteUser(target.id);
+      if (error) throw error;
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     return new Response(JSON.stringify({ error: '不明なアクションです' }), {
       status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

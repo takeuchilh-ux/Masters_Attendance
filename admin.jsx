@@ -1081,8 +1081,10 @@ function OfficeQRModal({ office, onClose }) {
 function AccountsPage() {
   const { offices, staff, setStaff, showToast } = useContextA(AppCtx);
   const [creating,  setCreating]  = useStateA(false);
+  const [editing,   setEditing]   = useStateA(null); // 編集対象staff
   const [pwTarget,  setPwTarget]  = useStateA(null); // PW変更対象staff
   const [form,      setForm]      = useStateA({ name:'', email:'', password:'', office_id:'', role:'office_manager' });
+  const [editForm,  setEditForm]  = useStateA({ name:'', office_id:'', role:'office_manager' });
   const [pwForm,    setPwForm]    = useStateA({ new_password:'' });
   const [busy,      setBusy]      = useStateA(false);
 
@@ -1117,6 +1119,32 @@ function AccountsPage() {
       showToast('アカウントを作成しました');
       setCreating(false);
       setForm({ name:'', email:'', password:'', office_id:'', role:'office_manager' });
+    } catch(e) { showToast(e.message, 'error'); }
+    setBusy(false);
+  }
+
+  async function updateAccount() {
+    if (!editForm.name.trim()) { showToast('氏名を入力してください', 'error'); return; }
+    setBusy(true);
+    try {
+      const payload = { name: editForm.name, office_id: editForm.office_id || null, role: editForm.role };
+      const { error } = await mdb('staff').update(payload).eq('id', editing.id);
+      if (error) throw new Error(error.message);
+      setStaff(ss => ss.map(s => s.id === editing.id ? { ...s, ...payload } : s));
+      showToast('アカウントを更新しました');
+      setEditing(null);
+    } catch(e) { showToast(e.message, 'error'); }
+    setBusy(false);
+  }
+
+  async function deleteAccount(s) {
+    if (!confirm(`「${s.name}」のアカウントを削除しますか？\nログインできなくなります。`)) return;
+    setBusy(true);
+    try {
+      await callEdge({ action: 'delete_user', target_email: s.email });
+      await mdb('staff').update({ role: 'general', email: null }).eq('id', s.id);
+      setStaff(ss => ss.map(x => x.id === s.id ? { ...x, role: 'general', email: null } : x));
+      showToast('アカウントを削除しました');
     } catch(e) { showToast(e.message, 'error'); }
     setBusy(false);
   }
@@ -1159,9 +1187,15 @@ function AccountsPage() {
                   <td className="mono" style={{ fontSize:12 }}>{s.email || <span className="muted">—</span>}</td>
                   <td><span className="pill role-full">{ROLE_LABELS[s.role] || s.role}</span></td>
                   <td>{office?.name || '—'}</td>
-                  <td>
+                  <td style={{ display:'flex', gap:4 }}>
+                    <button className="btn-mini" onClick={() => { setEditing(s); setEditForm({ name: s.name, office_id: s.office_id || '', role: s.role }); }}>
+                      ✏️ 編集
+                    </button>
                     <button className="btn-mini" onClick={() => { setPwTarget(s); setPwForm({ new_password:'' }); }}>
                       🔑 PW変更
+                    </button>
+                    <button className="btn-mini btn-danger" onClick={() => deleteAccount(s)} disabled={busy}>
+                      🗑 削除
                     </button>
                   </td>
                 </tr>
@@ -1210,6 +1244,44 @@ function AccountsPage() {
               <button className="btn-ghost" onClick={() => setCreating(false)}>キャンセル</button>
               <button className="btn-primary" onClick={createAccount} disabled={busy}>
                 {busy ? '作成中...' : 'アカウント作成'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* アカウント編集モーダル */}
+      {editing && (
+        <div className="modal-bg" onClick={() => setEditing(null)}>
+          <div className="modal" style={{ width:500 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-head">
+              <h3>{editing.name} の編集</h3>
+              <button className="x" onClick={() => setEditing(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <label className="field"><span>氏名</span>
+                <input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} autoFocus />
+              </label>
+              <div className="form-row2">
+                <label className="field"><span>権限</span>
+                  <select value={editForm.role} onChange={e => setEditForm(f => ({ ...f, role: e.target.value }))}>
+                    <option value="office_manager">事業所責任者</option>
+                    <option value="admin">本部</option>
+                  </select>
+                </label>
+                <label className="field"><span>所属事業所</span>
+                  <select value={editForm.office_id} onChange={e => setEditForm(f => ({ ...f, office_id: e.target.value }))}>
+                    <option value="">選択してください</option>
+                    {offices.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                  </select>
+                </label>
+              </div>
+              <p className="hint" style={{ marginTop:8 }}>※ メールアドレスの変更は Supabase ダッシュボードから行ってください</p>
+            </div>
+            <div className="modal-foot">
+              <button className="btn-ghost" onClick={() => setEditing(null)}>キャンセル</button>
+              <button className="btn-primary" onClick={updateAccount} disabled={busy || !editForm.name.trim()}>
+                {busy ? '保存中...' : '保存'}
               </button>
             </div>
           </div>
