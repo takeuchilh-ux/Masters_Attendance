@@ -683,15 +683,19 @@ function StaffDetailModal({ staff: s, offices, onClose, onEdit }) {
 }
 
 function StaffEditModal({ staff: s, offices, onClose, onSave }) {
+  // 既存データは "姓 名" or "姓名" のどちらでも対応
+  const parts = (s.name || '').split(/\s+/);
   const [form, setForm] = useStateA({
     id:          s.id,
-    name:        s.name        || '',
+    last_name:   parts[0] || '',
+    first_name:  parts.slice(1).join(' ') || '',
     office_id:   s.office_id   || offices[0]?.id,
     role:        s.role        || 'staff',
     birth_mmdd:  s.birth_mmdd  || '',
     email:       s.email       || '',
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const fullName = () => [form.last_name.trim(), form.first_name.trim()].filter(Boolean).join(' ');
 
   return (
     <div className="modal-bg" onClick={onClose}>
@@ -702,7 +706,14 @@ function StaffEditModal({ staff: s, offices, onClose, onSave }) {
         </div>
         <div className="modal-body">
           <div className="form-row2">
-            <label className="field"><span>氏名</span><input value={form.name} onChange={e => set('name', e.target.value)} autoFocus /></label>
+            <label className="field"><span>姓</span>
+              <input value={form.last_name} onChange={e => set('last_name', e.target.value)} autoFocus placeholder="山田" />
+            </label>
+            <label className="field"><span>名</span>
+              <input value={form.first_name} onChange={e => set('first_name', e.target.value)} placeholder="太郎" />
+            </label>
+          </div>
+          <div className="form-row2">
             <label className="field"><span>権限</span>
               <select value={form.role} onChange={e => set('role', e.target.value)}>
                 <option value="staff">一般</option>
@@ -710,12 +721,12 @@ function StaffEditModal({ staff: s, offices, onClose, onSave }) {
                 <option value="admin">本部</option>
               </select>
             </label>
+            <label className="field"><span>所属事業所</span>
+              <select value={form.office_id} onChange={e => set('office_id', e.target.value)}>
+                {offices.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+            </label>
           </div>
-          <label className="field"><span>所属事業所</span>
-            <select value={form.office_id} onChange={e => set('office_id', e.target.value)}>
-              {offices.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-            </select>
-          </label>
           <div className="form-row2">
             <label className="field">
               <span>生年月日（月日4桁）※打刻用</span>
@@ -731,7 +742,7 @@ function StaffEditModal({ staff: s, offices, onClose, onSave }) {
         </div>
         <div className="modal-foot">
           <button className="btn-ghost" onClick={onClose}>キャンセル</button>
-          <button className="btn-primary" onClick={() => { if (!form.name.trim()) return; onSave(form); }}>保存</button>
+          <button className="btn-primary" onClick={() => { if (!fullName()) return; onSave({ ...form, name: fullName() }); }}>保存</button>
         </div>
       </div>
     </div>
