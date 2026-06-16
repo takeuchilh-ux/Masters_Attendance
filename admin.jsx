@@ -536,15 +536,17 @@ function StaffAdminPage() {
   ), [staff, officeFilter, q]);
 
   async function saveStaff(form) {
-    if (form.id) {
-      const { id, ...rest } = form;
+    // last_name/first_name はUI用フィールドのため除外
+    const { last_name, first_name, ...dbForm } = form;
+    if (dbForm.id) {
+      const { id, ...rest } = dbForm;
       const { error } = await mdb('staff').update(rest).eq('id', id);
       if (!error) {
         setStaff(ss => ss.map(s => s.id === id ? { ...s, ...rest } : s));
         showToast('スタッフを更新しました');
       }
     } else {
-      const { data, error } = await mdb('staff').insert({ ...form, is_active: true }).select().single();
+      const { data, error } = await mdb('staff').insert({ ...dbForm, is_active: true }).select().single();
       if (!error && data) {
         setStaff(ss => [...ss, data]);
         showToast('スタッフを登録しました');
