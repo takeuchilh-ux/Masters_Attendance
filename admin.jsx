@@ -834,6 +834,7 @@ function OfficesPage() {
       address:   form.address   || null,
       latitude:  form.latitude  ? parseFloat(form.latitude)  : null,
       longitude: form.longitude ? parseFloat(form.longitude) : null,
+      ...(!form.id && { code: form.name.slice(0, 10) }),
     };
     try {
       if (form.id) {
