@@ -63,11 +63,14 @@ function OfficeShell({ profile }) {
       .then(({ count }) => setPendingCnt(count || 0));
   }
 
+  const isFujisawa = officeName === '藤沢事業所';
+
   const nav = [
     { id: 'dashboard', label: 'ダッシュボード', icon: '🏠' },
     { id: 'shifts',    label: 'シフト',         icon: '📅' },
     { id: 'requests',  label: '申請承認',        icon: '📝', badge: pendingCnt },
-    { id: 'touchlog',  label: 'QRログ',           icon: '🔍' },
+    { id: 'touchlog',  label: 'QRログ',          icon: '🔍' },
+    ...(isFujisawa ? [{ id: 'pcpunch', label: 'PC打刻', icon: '🖥️' }] : []),
     { id: 'staff',     label: 'スタッフ管理',    icon: '👥' },
     { id: 'qr',        label: 'QRコード',        icon: '📲' },
   ];
@@ -116,12 +119,13 @@ function OfficeShell({ profile }) {
             </div>
           </header>
           <div className="page">
-            {route === 'dashboard' && <OfficeDashboard   officeId={officeId} />}
-            {route === 'shifts'    && <OfficeShiftPage   officeId={officeId} />}
+            {route === 'dashboard' && <OfficeDashboard    officeId={officeId} />}
+            {route === 'shifts'    && <OfficeShiftPage    officeId={officeId} />}
             {route === 'requests'  && <OfficeRequestsPage officeId={officeId} onCountChange={setPendingCnt} />}
             {route === 'touchlog'  && <OfficeTouchLogPage officeId={officeId} />}
-            {route === 'staff'     && <OfficeStaffPage   officeId={officeId} />}
-            {route === 'qr'        && <OfficeQRPage      officeId={officeId} officeName={officeName} />}
+            {route === 'pcpunch'   && <OfficePCPunchPage  officeId={officeId} officeName={officeName} />}
+            {route === 'staff'     && <OfficeStaffPage    officeId={officeId} />}
+            {route === 'qr'        && <OfficeQRPage       officeId={officeId} officeName={officeName} />}
           </div>
         </main>
       </div>
@@ -776,6 +780,159 @@ function OfficeQRPage({ officeId, officeName }) {
           このQRコードをシールに印刷して事業所に貼り付けてください。<br />
           スタッフがスマートフォンで読み取ると打刻画面が開きます。
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// OfficePCPunchPage - PC打刻（藤沢事業所専用）
+// ============================================================
+function OfficePCPunchPage({ officeId, officeName }) {
+  const { staff } = useContextO(OfficeCtx);
+  const officeStaff = staff.filter(s => s.office_id === officeId && s.is_active);
+
+  const [selectedId, setSelectedId] = useStateO('');
+  const [birthInput, setBirthInput] = useStateO('');
+  const [status,     setStatus]     = useStateO(null); // null | 'confirm' | 'done' | 'error'
+  const [message,    setMessage]    = useStateO('');
+  const [punchType,  setPunchType]  = useStateO(''); // 'in' | 'out'
+  const [loading,    setLoading]    = useStateO(false);
+  const [todayLog,   setTodayLog]   = useStateO({}); // staffId → { inTime, outTime }
+
+  const today = localISO(new Date());
+
+  // 今日の打刻状況を取得
+  useEffectO(() => {
+    mdb('touch_logs')
+      .select('staff_id, touched_at, touch_type')
+      .gte('touched_at', `${today}T00:00:00`)
+      .lte('touched_at', `${today}T23:59:59`)
+      .eq('office_id', officeId)
+      .then(({ data }) => {
+        const map = {};
+        (data || []).forEach(t => {
+          if (!map[t.staff_id]) map[t.staff_id] = { inTime: null, outTime: null };
+          const hhmm = new Date(t.touched_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', hour12: false });
+          if (t.touch_type === 'in'  && !map[t.staff_id].inTime)  map[t.staff_id].inTime  = hhmm;
+          if (t.touch_type === 'out')                              map[t.staff_id].outTime = hhmm;
+        });
+        setTodayLog(map);
+      });
+  }, [officeId, today]);
+
+  async function doPunch(type) {
+    const sel = officeStaff.find(s => s.id === selectedId);
+    if (!sel) { setMessage('スタッフを選択してください'); setStatus('error'); return; }
+    if (!birthInput || birthInput.length !== 4) { setMessage('生年月日（月日4桁）を入力してください'); setStatus('error'); return; }
+    if (sel.birth_mmdd !== birthInput) { setMessage('生年月日が一致しません'); setStatus('error'); return; }
+
+    setLoading(true);
+    const now = new Date();
+    const { error } = await mdb('touch_logs').insert({
+      staff_id:   selectedId,
+      office_id:  officeId,
+      touch_type: type,
+      touched_at: now.toISOString(),
+      method:     'pc',
+    });
+    setLoading(false);
+
+    if (error) { setMessage('打刻に失敗しました: ' + error.message); setStatus('error'); return; }
+
+    const hhmm = now.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', hour12: false });
+    setTodayLog(prev => {
+      const cur = prev[selectedId] || {};
+      return { ...prev, [selectedId]: type === 'in' ? { ...cur, inTime: hhmm } : { ...cur, outTime: hhmm } };
+    });
+    setPunchType(type);
+    setMessage(`${sel.name} さんの${type === 'in' ? '出勤' : '退勤'}を記録しました（${hhmm}）`);
+    setStatus('done');
+    setSelectedId('');
+    setBirthInput('');
+  }
+
+  const sel = officeStaff.find(s => s.id === selectedId);
+  const log = todayLog[selectedId];
+
+  return (
+    <div className="stack">
+      <div className="page-head">
+        <div><h1>PC打刻</h1><p className="muted">{officeName} — 出退勤打刻</p></div>
+      </div>
+
+      {/* 今日の打刻状況 */}
+      <div className="card">
+        <div style={{ fontWeight:600, marginBottom:10, fontSize:14 }}>本日 {today} の打刻状況</div>
+        <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+          {officeStaff.map(s => {
+            const l = todayLog[s.id];
+            return (
+              <div key={s.id} style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, padding:'8px 12px', minWidth:140 }}>
+                <div style={{ fontWeight:600, fontSize:13, marginBottom:4 }}>{s.name}</div>
+                <div style={{ fontSize:12, color:'#475569' }}>
+                  {l?.inTime  ? <span style={{ color:'#15803d' }}>出勤 {l.inTime}</span>  : <span style={{ color:'#b91c1c' }}>未出勤</span>}
+                  {l?.outTime && <span style={{ color:'#1e40af', marginLeft:8 }}>退勤 {l.outTime}</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 打刻フォーム */}
+      <div className="card" style={{ maxWidth:420 }}>
+        <div style={{ fontWeight:600, fontSize:15, marginBottom:16 }}>打刻する</div>
+
+        <label className="field" style={{ marginBottom:12 }}>
+          <span>スタッフ選択</span>
+          <select value={selectedId} onChange={e => { setSelectedId(e.target.value); setStatus(null); setBirthInput(''); }}>
+            <option value="">— 選択してください —</option>
+            {officeStaff.map(s => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </label>
+
+        {selectedId && (
+          <>
+            {log && (
+              <div style={{ background:'#f0f9ff', border:'1px solid #bae6fd', borderRadius:6, padding:'8px 12px', fontSize:13, marginBottom:12 }}>
+                {log.inTime  && <div>出勤打刻済み: <strong>{log.inTime}</strong></div>}
+                {log.outTime && <div>退勤打刻済み: <strong>{log.outTime}</strong></div>}
+              </div>
+            )}
+            <label className="field" style={{ marginBottom:16 }}>
+              <span>生年月日（月日4桁）</span>
+              <input type="text" inputMode="numeric" maxLength={4} placeholder="例: 0315"
+                value={birthInput} onChange={e => { setBirthInput(e.target.value); setStatus(null); }}
+                style={{ fontSize:20, letterSpacing:4, textAlign:'center' }} />
+            </label>
+            <div style={{ display:'flex', gap:12 }}>
+              <button className="btn-primary" style={{ flex:1, fontSize:16, padding:'12px 0', background:'#15803d' }}
+                disabled={loading || birthInput.length !== 4}
+                onClick={() => doPunch('in')}>
+                出勤
+              </button>
+              <button className="btn-primary" style={{ flex:1, fontSize:16, padding:'12px 0', background:'#1e40af' }}
+                disabled={loading || birthInput.length !== 4}
+                onClick={() => doPunch('out')}>
+                退勤
+              </button>
+            </div>
+          </>
+        )}
+
+        {status === 'done' && (
+          <div style={{ marginTop:14, background:'#dcfce7', border:'1px solid #86efac', borderRadius:8, padding:'12px 14px', color:'#15803d', fontWeight:600 }}>
+            ✓ {message}
+          </div>
+        )}
+        {status === 'error' && (
+          <div style={{ marginTop:14, background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:8, padding:'12px 14px', color:'#b91c1c', fontWeight:600 }}>
+            ✗ {message}
+          </div>
+        )}
       </div>
     </div>
   );
