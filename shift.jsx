@@ -487,11 +487,31 @@ function ShiftEditModal({ sel, master, current, onClose, onSave, onDelete, staff
 function ShiftMasterSection({ officeId }) {
   const { shiftTypes, setShiftTypes, showToast } = useContextS(AppCtx);
   const [open, setOpen] = useStateS(false);
+  // ローカル編集用state（入力中はここだけ更新し、blur時にDBへ保存）
+  const [localEdits, setLocalEdits] = useStateS({});
 
   const officeTypes = useMemoS(
     () => shiftTypes.filter(t => t.office_id === officeId),
     [shiftTypes, officeId]
   );
+
+  // ローカル値を取得（編集中ならそちらを優先）
+  const localVal = (id, field, fallback) =>
+    (localEdits[id] && localEdits[id][field] !== undefined) ? localEdits[id][field] : fallback;
+
+  function handleChange(id, field, value) {
+    setLocalEdits(prev => ({ ...prev, [id]: { ...(prev[id] || {}), [field]: value } }));
+  }
+
+  async function handleBlur(id, field, value) {
+    await mdb('shift_types').update({ [field]: value }).eq('id', id);
+    setShiftTypes(ts => ts.map(t => t.id === id ? { ...t, [field]: value } : t));
+    setLocalEdits(prev => {
+      const next = { ...prev };
+      if (next[id]) delete next[id][field];
+      return next;
+    });
+  }
 
   async function addType() {
     const newType = {
@@ -558,8 +578,9 @@ function ShiftMasterSection({ officeId }) {
                 <td>
                   <input
                     className="cell-input"
-                    value={t.label}
-                    onChange={e => updateType(t.id, 'label', e.target.value)}
+                    value={localVal(t.id, 'label', t.label)}
+                    onChange={e => handleChange(t.id, 'label', e.target.value)}
+                    onBlur={e => handleBlur(t.id, 'label', e.target.value)}
                   />
                 </td>
                 <td>
