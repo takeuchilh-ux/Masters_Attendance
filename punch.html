@@ -210,7 +210,7 @@ async function checkLocation() {
         if (office.latitude && office.longitude) {
           const dist = haversine(latitude, longitude, office.latitude, office.longitude);
           if (dist > PUNCH_RADIUS_M) {
-            reject(new Error(`事業所から${Math.round(dist)}m離れています。\n事業所内（${PUNCH_RADIUS_M}m以内）から打刻してください。`));
+            reject(new Error(`事業所から離れすぎてます。\n事業所内から打刻してください。`));
             return;
           }
         }

@@ -133,7 +133,7 @@ function OfficeShell({ profile }) {
 // OfficeDashboard - 今日の出欠
 // ============================================================
 function OfficeDashboard({ officeId }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localISO(new Date());
   const { staff } = useContextO(OfficeCtx);
   const [shifts,  setShifts]  = useStateO([]);
   const [touches, setTouches] = useStateO([]);
@@ -216,7 +216,7 @@ function OfficeShiftPage({ officeId }) {
   useEffectO(() => {
     setLoading(true);
     const ms  = `${year}-${String(month).padStart(2,'0')}`;
-    const end = new Date(year, month, 0).toISOString().slice(0, 10);
+    const end = localISO(new Date(year, month, 0));
     mdb('shifts').select('*').eq('office_id', officeId)
       .gte('date', `${ms}-01`).lte('date', end)
       .then(({ data }) => {
@@ -237,7 +237,7 @@ function OfficeShiftPage({ officeId }) {
     const dim = new Date(year, month, 0).getDate();
     return Array.from({ length: dim }, (_, i) => {
       const d = new Date(year, month - 1, i + 1);
-      return { n: i + 1, dow: d.getDay(), iso: d.toISOString().slice(0, 10) };
+      return { n: i + 1, dow: d.getDay(), iso: localISO(d) };
     });
   }, [year, month]);
 
@@ -384,6 +384,10 @@ function fmtShort(hhmm) {
   const dec = m === 0 ? '' : m === 15 ? '.25' : m === 30 ? '.5' : '.75';
   return `${h}${dec}`;
 }
+function localISO(d) {
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+}
 
 function ShiftEditModal({ staffName, date, shiftTypes, current, onClose, onSave, onDelete }) {
   const [selType,   setSelType]   = useStateO(current?.typeId || '');
@@ -443,12 +447,12 @@ function OfficeRequestsPage({ officeId, onCountChange }) {
   const [requests,     setRequests]     = useStateO([]);
   const [loading,      setLoading]      = useStateO(true);
   const [statusFilter, setStatusFilter] = useStateO('pending');
-  const [month,        setMonth]        = useStateO(new Date().toISOString().slice(0,7));
+  const [month,        setMonth]        = useStateO(localISO(new Date()).slice(0,7));
 
   async function load() {
     setLoading(true);
     const [y, m] = month.split('-').map(Number);
-    const end = new Date(y, m, 0).toISOString().slice(0, 10);
+    const end = localISO(new Date(y, m, 0));
     const { data } = await mdb('requests').select('*, staff(name)')
       .eq('office_id', officeId).gte('date', `${month}-01`).lte('date', end)
       .order('created_at', { ascending: false });
@@ -530,7 +534,7 @@ function OfficeRequestsPage({ officeId, onCountChange }) {
 // OfficeTouchLogPage - QRログ
 // ============================================================
 function OfficeTouchLogPage({ officeId }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localISO(new Date());
   const [logs,    setLogs]    = useStateO([]);
   const [loading, setLoading] = useStateO(true);
   const [from,    setFrom]    = useStateO(today);

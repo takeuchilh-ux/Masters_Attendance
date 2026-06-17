@@ -24,6 +24,11 @@ function fmtShort(hhmm) {
   const dec = m === 0 ? '' : m === 15 ? '.25' : m === 30 ? '.5' : '.75';
   return `${h}${dec}`;
 }
+// ローカル日付を YYYY-MM-DD 文字列に変換（toISOString()はUTC変換でJSTでずれるため）
+function localISO(d) {
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+}
 
 // ============================================================
 // ShiftPage - シフト作成・編集
@@ -59,7 +64,7 @@ function ShiftPage({ auth }) {
     if (!officeId) return;
     setLoadingShifts(true);
     const monthStr  = `${year}-${String(month).padStart(2,'0')}`;
-    const monthEnd  = new Date(year, month, 0).toISOString().slice(0, 10);
+    const monthEnd  = localISO(new Date(year, month, 0));
     mdb('shifts')
       .select('*')
       .gte('date', `${monthStr}-01`)
@@ -92,7 +97,7 @@ function ShiftPage({ auth }) {
     const dim = new Date(year, month, 0).getDate();
     return Array.from({ length: dim }, (_, i) => {
       const d = new Date(year, month - 1, i + 1);
-      return { d, n: i + 1, dow: d.getDay(), iso: d.toISOString().slice(0, 10) };
+      return { d, n: i + 1, dow: d.getDay(), iso: localISO(d) };
     });
   }, [year, month]);
 
@@ -343,7 +348,7 @@ function WeekView({ staff, shifts, master, year, month, onCellClick }) {
               <strong>{s.name}</strong>
             </div>
             {days.map((d, i) => {
-              const iso = d.toISOString().slice(0, 10);
+              const iso = localISO(d);
               const sh  = shifts[`${s.id}|${iso}`];
               const sm  = sh ? master.find(x => x.id === sh.typeId) : null;
               return (
@@ -371,7 +376,7 @@ function WeekView({ staff, shifts, master, year, month, onCellClick }) {
 // ============================================================
 function GanttView({ staff, shifts, master, year, month }) {
   const today = new Date(year, month - 1, 7);
-  const iso   = today.toISOString().slice(0, 10);
+  const iso   = localISO(today);
   const HOURS = Array.from({ length: 18 }, (_, i) => i + 6);
   return (
     <div className="gantt">
