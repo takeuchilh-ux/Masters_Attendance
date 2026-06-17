@@ -226,6 +226,7 @@ function OfficeShiftPage({ officeId }) {
             typeId: s.shift_type_id, dbId: s.id,
             override: (s.override_start || s.override_end)
               ? { start: fmtTime(s.override_start), end: fmtTime(s.override_end) } : null,
+            notes: s.notes || '',
           };
         });
         setShifts(map); setLoading(false);
@@ -240,7 +241,7 @@ function OfficeShiftPage({ officeId }) {
     });
   }, [year, month]);
 
-  async function saveShift(staffId, iso, typeId, override) {
+  async function saveShift(staffId, iso, typeId, override, notes) {
     const key = `${staffId}|${iso}`;
     const ex  = shifts[key];
     if (!typeId) {
@@ -249,13 +250,14 @@ function OfficeShiftPage({ officeId }) {
       return;
     }
     const payload = { staff_id: staffId, office_id: officeId, date: iso, shift_type_id: typeId,
-      override_start: override?.start || null, override_end: override?.end || null };
+      override_start: override?.start || null, override_end: override?.end || null,
+      notes: notes || null };
     if (ex?.dbId) {
       await mdb('shifts').update(payload).eq('id', ex.dbId);
-      setShifts(s => ({ ...s, [key]: { typeId, override, dbId: ex.dbId } }));
+      setShifts(s => ({ ...s, [key]: { typeId, override, notes, dbId: ex.dbId } }));
     } else {
       const { data } = await mdb('shifts').insert(payload).select().single();
-      setShifts(s => ({ ...s, [key]: { typeId, override, dbId: data?.id } }));
+      setShifts(s => ({ ...s, [key]: { typeId, override, notes, dbId: data?.id } }));
     }
   }
 
@@ -299,7 +301,7 @@ function OfficeShiftPage({ officeId }) {
               </thead>
               <tbody>
                 {staff.map(s => {
-                  let totalH = 0;
+                  let totalH = 0, kyukeiCnt = 0, yukyuCnt = 0, kyuCnt = 0;
                   return (
                     <tr key={s.id}>
                       <td className="sticky-l">
@@ -318,6 +320,9 @@ function OfficeShiftPage({ officeId }) {
                           const [oh,om]=en.split(':').map(Number);
                           totalH += ((oh*60+om)-(ih*60+im)-(sm?.break_minutes||60))/60;
                         }
+                        if (sm?.label === '公休') kyukeiCnt++;
+                        if (sm?.label === '有給') yukyuCnt++;
+                        if (sm?.label === '休')   kyuCnt++;
                         return (
                           <td key={d.n}
                             className={`shift-cell ${d.dow===0?'sun':d.dow===6?'sat':''}`}
@@ -326,12 +331,18 @@ function OfficeShiftPage({ officeId }) {
                               <div className="cell-shift" style={{ background: sm.color }}>
                                 <div className="lbl">{sm.label}</div>
                                 {st && <div className="time mono">{st}〜{en}</div>}
+                                {sh?.notes && <div className="lbl" style={{ fontSize:9, opacity:.8 }}>📝</div>}
                               </div>
                             )}
                           </td>
                         );
                       })}
-                      <td className="total mono"><strong>{Math.max(0,Math.round(totalH))}</strong>h</td>
+                      <td className="total" style={{ fontSize:11, lineHeight:1.6 }}>
+                        <strong className="mono">{Math.max(0,Math.round(totalH))}h</strong>
+                        {kyukeiCnt > 0 && <div style={{ color:'#ef4444' }}>公休{kyukeiCnt}</div>}
+                        {yukyuCnt  > 0 && <div style={{ color:'#16a34a' }}>有給{yukyuCnt}</div>}
+                        {kyuCnt    > 0 && <div style={{ color:'#dc2626' }}>休{kyuCnt}</div>}
+                      </td>
                     </tr>
                   );
                 })}
@@ -348,7 +359,7 @@ function OfficeShiftPage({ officeId }) {
           shiftTypes={shiftTypes}
           current={shifts[`${editing.staffId}|${editing.date}`]}
           onClose={() => setEditing(null)}
-          onSave={async (typeId, override) => { await saveShift(editing.staffId, editing.date, typeId, override); setEditing(null); }}
+          onSave={async (typeId, override, notes) => { await saveShift(editing.staffId, editing.date, typeId, override, notes); setEditing(null); }}
           onDelete={async () => { await saveShift(editing.staffId, editing.date, null, null); setEditing(null); }}
         />
       )}
@@ -372,17 +383,24 @@ function ShiftEditModal({ staffName, date, shiftTypes, current, onClose, onSave,
   const [selType,   setSelType]   = useStateO(current?.typeId || '');
   const [overStart, setOverStart] = useStateO(current?.override?.start || '');
   const [overEnd,   setOverEnd]   = useStateO(current?.override?.end   || '');
+  const [notes,     setNotes]     = useStateO(current?.notes || '');
+  function pickType(id) {
+    setSelType(id);
+    const m = shiftTypes.find(x => x.id === id);
+    setOverStart(fmtTime(m?.start_time) || '');
+    setOverEnd(fmtTime(m?.end_time) || '');
+  }
   return (
     <div className="modal-bg" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-head"><h3>{staffName} — {date}</h3><button className="x" onClick={onClose}>×</button></div>
         <div className="modal-body">
           <div className="shift-pick">
-            <button className={`shift-chip ${!selType?'active':''}`} onClick={() => setSelType('')} style={{ borderColor:'#e2e8f0' }}>
+            <button className={`shift-chip ${!selType?'active':''}`} onClick={() => { setSelType(''); setOverStart(''); setOverEnd(''); }} style={{ borderColor:'#e2e8f0' }}>
               <strong>— なし —</strong>
             </button>
             {shiftTypes.map(t => (
-              <button key={t.id} className={`shift-chip ${selType===t.id?'active':''}`} style={{ borderColor:t.color }} onClick={() => setSelType(t.id)}>
+              <button key={t.id} className={`shift-chip ${selType===t.id?'active':''}`} style={{ borderColor:t.color }} onClick={() => pickType(t.id)}>
                 <span className="sw" style={{ background:t.color }}></span>
                 <div><strong>{t.label}</strong><div className="small">{fmtTime(t.start_time)}〜{fmtTime(t.end_time)}</div></div>
               </button>
@@ -397,11 +415,15 @@ function ShiftEditModal({ staffName, date, shiftTypes, current, onClose, onSave,
               </div>
             </>
           )}
+          <label className="field" style={{ marginTop:8 }}>
+            <span>備考</span>
+            <textarea rows={2} style={{ width:'100%', resize:'vertical', fontSize:13 }} value={notes} onChange={e => setNotes(e.target.value)} placeholder="自由記入" />
+          </label>
         </div>
         <div className="modal-foot">
           {current?.typeId && <button className="btn-ghost danger" onClick={onDelete}>削除</button>}
           <button className="btn-ghost" onClick={onClose}>キャンセル</button>
-          <button className="btn-primary" onClick={() => onSave(selType, overStart||overEnd?{start:overStart,end:overEnd}:null)}>保存</button>
+          <button className="btn-primary" onClick={() => onSave(selType, overStart||overEnd?{start:overStart,end:overEnd}:null, notes)}>保存</button>
         </div>
       </div>
     </div>

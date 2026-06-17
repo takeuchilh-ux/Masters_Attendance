@@ -66,6 +66,7 @@ function ShiftPage({ auth }) {
             override: (s.override_start || s.override_end)
               ? { start: fmtTime(s.override_start), end: fmtTime(s.override_end) }
               : null,
+            notes: s.notes || '',
             dbId: s.id,
           };
         });
@@ -89,12 +90,11 @@ function ShiftPage({ auth }) {
     });
   }, [year, month]);
 
-  async function saveShift(staffId, iso, typeId, override) {
+  async function saveShift(staffId, iso, typeId, override, notes) {
     const key      = `${staffId}|${iso}`;
     const existing = shifts[key];
 
     if (!typeId) {
-      // 削除
       if (existing?.dbId) {
         await mdb('shifts').delete().eq('id', existing.dbId);
       }
@@ -109,14 +109,15 @@ function ShiftPage({ auth }) {
       shift_type_id:  typeId,
       override_start: override?.start || null,
       override_end:   override?.end   || null,
+      notes:          notes || null,
     };
 
     if (existing?.dbId) {
       await mdb('shifts').update(payload).eq('id', existing.dbId);
-      setShifts(s => ({ ...s, [key]: { typeId, override, dbId: existing.dbId } }));
+      setShifts(s => ({ ...s, [key]: { typeId, override, notes, dbId: existing.dbId } }));
     } else {
       const { data } = await mdb('shifts').insert(payload).select().single();
-      setShifts(s => ({ ...s, [key]: { typeId, override, dbId: data?.id } }));
+      setShifts(s => ({ ...s, [key]: { typeId, override, notes, dbId: data?.id } }));
     }
   }
 
@@ -201,7 +202,7 @@ function ShiftPage({ auth }) {
               </thead>
               <tbody>
                 {officeStaff.map(s => {
-                  let totalH = 0;
+                  let totalH = 0, kyukeiCnt = 0, yukyuCnt = 0, kyuCnt = 0;
                   return (
                     <tr key={s.id}>
                       <td className="sticky-l">
@@ -220,6 +221,9 @@ function ShiftPage({ auth }) {
                           const [oh, om] = end.split(':').map(Number);
                           totalH += (oh * 60 + om - ih * 60 - im - (sm?.break_minutes || 60)) / 60;
                         }
+                        if (sm?.label === '公休') kyukeiCnt++;
+                        if (sm?.label === '有給') yukyuCnt++;
+                        if (sm?.label === '休')   kyuCnt++;
                         return (
                           <td
                             key={d.n}
@@ -230,12 +234,18 @@ function ShiftPage({ auth }) {
                               <div className="cell-shift" style={{ background: sm.color }}>
                                 <div className="lbl">{sm.label}</div>
                                 {start && <div className="time mono">{start}〜{end}</div>}
+                                {sh?.notes && <div className="lbl" style={{ fontSize:9, opacity:.8 }}>📝</div>}
                               </div>
                             )}
                           </td>
                         );
                       })}
-                      <td className="total mono"><strong>{Math.round(totalH)}</strong>h</td>
+                      <td className="total" style={{ fontSize:11, lineHeight:1.6 }}>
+                        <strong className="mono">{Math.round(totalH)}h</strong>
+                        {kyukeiCnt > 0 && <div style={{ color:'#ef4444' }}>公休{kyukeiCnt}</div>}
+                        {yukyuCnt  > 0 && <div style={{ color:'#16a34a' }}>有給{yukyuCnt}</div>}
+                        {kyuCnt    > 0 && <div style={{ color:'#dc2626' }}>休{kyuCnt}</div>}
+                      </td>
                     </tr>
                   );
                 })}
@@ -272,8 +282,8 @@ function ShiftPage({ auth }) {
           current={shifts[`${editing.staffId}|${editing.date}`]}
           staffName={officeStaff.find(s => s.id === editing.staffId)?.name}
           onClose={() => setEditing(null)}
-          onSave={async (typeId, override) => {
-            await saveShift(editing.staffId, editing.date, typeId, override);
+          onSave={async (typeId, override, notes) => {
+            await saveShift(editing.staffId, editing.date, typeId, override, notes);
             showToast('シフトを更新しました');
             setEditing(null);
           }}
@@ -404,6 +414,7 @@ function ShiftEditModalAdmin({ sel, master, current, onClose, onSave, onDelete, 
   const [typeId,    setTypeId]    = useStateS(current?.typeId || '');
   const [overStart, setOverStart] = useStateS(current?.override?.start || '');
   const [overEnd,   setOverEnd]   = useStateS(current?.override?.end   || '');
+  const [notes,     setNotes]     = useStateS(current?.notes || '');
 
   function pickType(id) {
     setTypeId(id);
@@ -485,6 +496,18 @@ function ShiftEditModalAdmin({ sel, master, current, onClose, onSave, onDelete, 
               )}
             </>
           )}
+
+          {/* 備考 */}
+          <label className="field">
+            <span>備考（任意）</span>
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="自由記入"
+              rows={2}
+              style={{ resize:'vertical', fontFamily:'inherit', fontSize:13 }}
+            />
+          </label>
         </div>
         <div className="modal-foot">
           {current?.typeId && onDelete && (
@@ -497,7 +520,7 @@ function ShiftEditModalAdmin({ sel, master, current, onClose, onSave, onDelete, 
           <button className="btn-ghost" onClick={onClose}>キャンセル</button>
           <button
             className="btn-primary"
-            onClick={() => onSave(typeId, isOverride ? { start: overStart, end: overEnd } : null)}
+            onClick={() => onSave(typeId, isOverride ? { start: overStart, end: overEnd } : null, notes)}
           >保存</button>
         </div>
       </div>
