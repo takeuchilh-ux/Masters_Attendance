@@ -653,30 +653,29 @@ function StaffAdminPage() {
   ), [staff, officeFilter, q]);
 
   async function saveStaff(form) {
-    // last_name/first_name はUI用フィールドのため除外
-    const { last_name, first_name, ...dbForm } = form;
-    // 空文字列はnullに変換（unique制約回避）
-    if (!dbForm.email)      dbForm.email      = null;
-    if (!dbForm.birth_mmdd) dbForm.birth_mmdd = null;
-    if (!dbForm.office_id)  dbForm.office_id  = null;
+    // DBに送るフィールドを明示的に指定（UI専用フィールドを除外）
+    const payload = {
+      name:       form.name,
+      office_id:  form.office_id  || null,
+      role:       form.role       || 'staff',
+      birth_mmdd: form.birth_mmdd || null,
+      email:      form.email      || null,
+    };
 
-    if (dbForm.id) {
-      const { id, ...rest } = dbForm;
-      // undefinedフィールドを除外
-      const payload = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined));
-      console.log('[saveStaff] update payload:', payload, 'id:', id);
-      const { error } = await mdb('staff').update(payload).eq('id', id);
+    if (form.id) {
+      const { error } = await mdb('staff').update(payload).eq('id', form.id);
       if (error) {
-        console.error('[saveStaff] error:', error);
-        showToast(`更新失敗: ${error.message} (code: ${error.code})`, 'error');
+        console.error('[saveStaff] update error:', error);
+        showToast(`更新失敗: ${error.message}`, 'error');
         return;
       }
-      setStaff(ss => ss.map(s => s.id === id ? { ...s, ...payload } : s));
+      setStaff(ss => ss.map(s => s.id === form.id ? { ...s, ...payload } : s));
       showToast('スタッフを更新しました');
     } else {
-      const { data, error } = await mdb('staff').insert({ ...dbForm, is_active: true }).select().single();
+      const { data, error } = await mdb('staff').insert({ ...payload, is_active: true }).select().single();
       if (error) {
-        showToast('登録に失敗しました: ' + error.message, 'error');
+        console.error('[saveStaff] insert error:', error);
+        showToast(`登録失敗: ${error.message}`, 'error');
         return;
       }
       if (data) setStaff(ss => [...ss, data]);
