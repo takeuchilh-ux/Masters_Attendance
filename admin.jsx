@@ -12,7 +12,7 @@ function DashboardPage() {
   const [todayTouches, setTodayTouches] = useStateA([]);
   const [loading,      setLoading]      = useStateA(true);
   const [activeTab,    setActiveTab]    = useStateA('all');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localISOA(new Date());
 
   useEffectA(() => {
     async function load() {
@@ -24,8 +24,7 @@ function DashboardPage() {
         mdb('touch_logs')
           .select('staff_id, touched_at, touch_type')
           .gte('touched_at', `${today}T00:00:00`)
-          .lte('touched_at', `${today}T23:59:59`)
-          .eq('touch_type', 'in'),
+          .lte('touched_at', `${today}T23:59:59`),
       ]);
       setTodayShifts(shiftRes.data || []);
       setTodayTouches(touchRes.data || []);
@@ -36,9 +35,64 @@ function DashboardPage() {
     return () => clearInterval(id);
   }, [today]);
 
-  const touchedIds = useMemoA(() => new Set(todayTouches.map(t => t.staff_id)), [todayTouches]);
+  // staff_id → { inTime, outTime } のマップ
+  const touchMap = useMemoA(() => {
+    const map = {};
+    todayTouches.forEach(t => {
+      if (!map[t.staff_id]) map[t.staff_id] = { inTime: null, outTime: null };
+      const hhmm = new Date(t.touched_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', hour12: false });
+      if (t.touch_type === 'in'  && !map[t.staff_id].inTime)  map[t.staff_id].inTime  = hhmm;
+      if (t.touch_type === 'out')                              map[t.staff_id].outTime = hhmm;
+    });
+    return map;
+  }, [todayTouches]);
+
+  const touchedIds   = useMemoA(() => new Set(Object.keys(touchMap)), [touchMap]);
   const presentCount = todayShifts.filter(s => touchedIds.has(s.staff_id)).length;
   const absentCount  = todayShifts.filter(s => !touchedIds.has(s.staff_id)).length;
+
+  // 出勤予定時刻をHH:MM形式で返す（override優先）
+  function shiftExpected(shift) {
+    const st = shift?.shift_types;
+    const s  = shift?.override_start ? fmtTime(shift.override_start) : fmtTime(st?.start_time);
+    const e  = shift?.override_end   ? fmtTime(shift.override_end)   : fmtTime(st?.end_time);
+    return (s && e) ? `${s}〜${e}` : null;
+  }
+
+  function AttendanceRow({ s, shift }) {
+    const punch    = touchMap[s.id];
+    const hasPunch = !!punch?.inTime;
+    const st       = shift?.shift_types;
+    const expected = shiftExpected(shift);
+    return (
+      <div className="attendance-row" style={{ alignItems:'flex-start', padding:'10px 12px', borderBottom:'1px solid var(--line)', gap:10 }}>
+        {/* 未打刻バッジ or 出勤済みマーク */}
+        <div style={{ minWidth:56, paddingTop:2 }}>
+          {hasPunch
+            ? <span style={{ fontSize:11, background:'#dcfce7', color:'#15803d', borderRadius:4, padding:'2px 6px', fontWeight:600 }}>出勤済</span>
+            : <span style={{ fontSize:11, background:'#fee2e2', color:'#b91c1c', borderRadius:4, padding:'2px 6px', fontWeight:700, animation:'pulse 1.5s infinite' }}>未打刻</span>
+          }
+        </div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontWeight:600, fontSize:14, marginBottom:4 }}>{s.name}</div>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:8, fontSize:12 }}>
+            {st && <span className="att-shift" style={{ background: st.color }}>{st.label}</span>}
+            {expected && (
+              <span style={{ color:'#475569' }}>
+                <span style={{ color:'#94a3b8', marginRight:2 }}>予定</span>{expected}
+              </span>
+            )}
+            {hasPunch && (
+              <span style={{ color:'#15803d' }}>
+                <span style={{ color:'#94a3b8', marginRight:2 }}>実績</span>
+                {punch.inTime}{punch.outTime ? `〜${punch.outTime}` : '〜（退勤未）'}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   function OfficeAttendance({ office }) {
     const offShifts  = todayShifts.filter(s => s.office_id === office.id);
@@ -54,26 +108,13 @@ function DashboardPage() {
           <div className="kpi ok"><span>出勤確認済み</span><strong>{present}<small>名</small></strong></div>
           <div className="kpi warn"><span>未確認</span><strong>{absent}<small>名</small></strong></div>
         </div>
-        <div className="card">
-          <div className="attendance-list">
-            {offStaff.filter(s => shiftedIds.has(s.id)).map(s => {
-              const shift      = offShifts.find(sh => sh.staff_id === s.id);
-              const hasTouched = touchedIds.has(s.id);
-              const st         = shift?.shift_types;
-              return (
-                <div key={s.id} className="attendance-row">
-                  <span title={hasTouched ? '出勤確認済み' : '未出勤'}>
-                    {hasTouched ? '🟢' : '🔴'}
-                  </span>
-                  <span className="att-name">{s.name}</span>
-                  {st && <span className="att-shift" style={{ background: st.color }}>{st.label}</span>}
-                </div>
-              );
-            })}
-            {offShifts.length === 0 && (
-              <div className="muted small" style={{ padding: '12px 16px' }}>本日のシフトなし</div>
-            )}
-          </div>
+        <div className="card" style={{ padding:0 }}>
+          {offStaff.filter(s => shiftedIds.has(s.id)).map(s => (
+            <AttendanceRow key={s.id} s={s} shift={offShifts.find(sh => sh.staff_id === s.id)} />
+          ))}
+          {offShifts.length === 0 && (
+            <div className="muted small" style={{ padding: '12px 16px' }}>本日のシフトなし</div>
+          )}
         </div>
       </div>
     );
@@ -88,7 +129,6 @@ function DashboardPage() {
         </div>
       </div>
 
-      {/* 事業所タブ */}
       <div className="tabs" style={{ background: '#fff', borderRadius: 'var(--radius-lg)', border: '1px solid var(--line)', padding: '0 8px' }}>
         <button className={`tab ${activeTab === 'all' ? 'active' : ''}`} onClick={() => setActiveTab('all')}>全体</button>
         {offices.map(o => (
@@ -115,31 +155,20 @@ function DashboardPage() {
               const shiftedIds = new Set(offShifts.map(s => s.staff_id));
               const present    = offShifts.filter(s => touchedIds.has(s.staff_id)).length;
               return (
-                <div key={office.id} className="card office-card">
-                  <div className="office-card-head">
+                <div key={office.id} className="card office-card" style={{ padding:0 }}>
+                  <div className="office-card-head" style={{ padding:'12px 14px' }}>
                     <strong>{office.name}</strong>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                       <span className="pill done">{present}名出勤</span>
                       <span className="muted small">{offShifts.length}名予定</span>
                     </div>
                   </div>
-                  <div className="attendance-list">
-                    {offStaff.filter(s => shiftedIds.has(s.id)).map(s => {
-                      const shift      = offShifts.find(sh => sh.staff_id === s.id);
-                      const hasTouched = touchedIds.has(s.id);
-                      const st         = shift?.shift_types;
-                      return (
-                        <div key={s.id} className="attendance-row">
-                          <span title={hasTouched ? '出勤確認済み' : '未出勤'}>{hasTouched ? '🟢' : '🔴'}</span>
-                          <span className="att-name">{s.name}</span>
-                          {st && <span className="att-shift" style={{ background: st.color }}>{st.label}</span>}
-                        </div>
-                      );
-                    })}
-                    {offShifts.length === 0 && (
-                      <div className="muted small" style={{ padding: '8px 12px' }}>本日のシフトなし</div>
-                    )}
-                  </div>
+                  {offStaff.filter(s => shiftedIds.has(s.id)).map(s => (
+                    <AttendanceRow key={s.id} s={s} shift={offShifts.find(sh => sh.staff_id === s.id)} />
+                  ))}
+                  {offShifts.length === 0 && (
+                    <div className="muted small" style={{ padding: '8px 14px' }}>本日のシフトなし</div>
+                  )}
                 </div>
               );
             })}
@@ -150,6 +179,11 @@ function DashboardPage() {
       )}
     </div>
   );
+}
+
+function localISOA(d) {
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
 }
 
 // ============================================================
