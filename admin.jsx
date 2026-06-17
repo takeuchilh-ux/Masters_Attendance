@@ -1267,13 +1267,12 @@ function AccountsPage() {
 
   async function updateAccount() {
     if (!editForm.name.trim()) { showToast('氏名を入力してください', 'error'); return; }
-    if (!editForm.email.trim()) { showToast('メールアドレスを入力してください', 'error'); return; }
     setBusy(true);
     try {
-      const newEmail = editForm.email.trim();
-      const oldEmail = editing.email;
-      // メールアドレスが変わった場合はAuth側も更新
-      if (newEmail !== oldEmail) {
+      const newEmail = editForm.email.trim() || null;
+      const oldEmail = editing.email || null;
+      // Auth側のメール変更：旧メールが存在し、かつ変更があった場合のみ
+      if (oldEmail && newEmail && newEmail !== oldEmail) {
         await callEdge({ action: 'change_email', target_email: oldEmail, new_email: newEmail });
       }
       const payload = { name: editForm.name, office_id: editForm.office_id || null, role: editForm.role, email: newEmail };
