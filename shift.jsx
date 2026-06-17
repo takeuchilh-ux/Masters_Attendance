@@ -266,7 +266,7 @@ function ShiftPage({ auth }) {
       </div>
 
       {editing && (
-        <ShiftEditModal
+        <ShiftEditModalAdmin
           sel={editing}
           master={shiftMaster}
           current={shifts[`${editing.staffId}|${editing.date}`]}
@@ -398,9 +398,9 @@ function GanttView({ staff, shifts, master, year, month }) {
 }
 
 // ============================================================
-// ShiftEditModal
+// ShiftEditModalAdmin
 // ============================================================
-function ShiftEditModal({ sel, master, current, onClose, onSave, onDelete, staffName }) {
+function ShiftEditModalAdmin({ sel, master, current, onClose, onSave, onDelete, staffName }) {
   const [typeId,    setTypeId]    = useStateS(current?.typeId || '');
   const [overStart, setOverStart] = useStateS(current?.override?.start || '');
   const [overEnd,   setOverEnd]   = useStateS(current?.override?.end   || '');
