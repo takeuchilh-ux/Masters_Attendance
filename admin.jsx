@@ -656,17 +656,22 @@ function StaffAdminPage() {
     // last_name/first_name はUI用フィールドのため除外
     const { last_name, first_name, ...dbForm } = form;
     // 空文字列はnullに変換（unique制約回避）
-    if (dbForm.email === '') dbForm.email = null;
-    if (dbForm.birth_mmdd === '') dbForm.birth_mmdd = null;
+    if (!dbForm.email)      dbForm.email      = null;
+    if (!dbForm.birth_mmdd) dbForm.birth_mmdd = null;
+    if (!dbForm.office_id)  dbForm.office_id  = null;
 
     if (dbForm.id) {
       const { id, ...rest } = dbForm;
-      const { error } = await mdb('staff').update(rest).eq('id', id);
+      // undefinedフィールドを除外
+      const payload = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined));
+      console.log('[saveStaff] update payload:', payload, 'id:', id);
+      const { error } = await mdb('staff').update(payload).eq('id', id);
       if (error) {
-        showToast('更新に失敗しました: ' + error.message, 'error');
+        console.error('[saveStaff] error:', error);
+        showToast(`更新失敗: ${error.message} (code: ${error.code})`, 'error');
         return;
       }
-      setStaff(ss => ss.map(s => s.id === id ? { ...s, ...rest } : s));
+      setStaff(ss => ss.map(s => s.id === id ? { ...s, ...payload } : s));
       showToast('スタッフを更新しました');
     } else {
       const { data, error } = await mdb('staff').insert({ ...dbForm, is_active: true }).select().single();
