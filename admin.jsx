@@ -260,7 +260,7 @@ function RequestsViewPage() {
 // TouchLogPage - QRログ（本部）
 // ============================================================
 function TouchLogPage() {
-  const { offices } = useContextA(AppCtx);
+  const { offices, showToast } = useContextA(AppCtx);
   const today = new Date().toISOString().slice(0, 10);
   const [logs,         setLogs]         = useStateA([]);
   const [loading,      setLoading]      = useStateA(true);
@@ -268,21 +268,21 @@ function TouchLogPage() {
   const [from,         setFrom]         = useStateA(today);
   const [to,           setTo]           = useStateA(today);
   const [q,            setQ]            = useStateA('');
+  const [editTarget,   setEditTarget]   = useStateA(null); // { row, field:'in'|'out' }
 
-  useEffectA(() => {
-    async function load() {
-      setLoading(true);
-      const res = await mdb('touch_logs')
-        .select('*, staff(name), offices(name)')
-        .gte('touched_at', `${from}T00:00:00`)
-        .lte('touched_at', `${to}T23:59:59`)
-        .order('touched_at', { ascending: true })
-        .limit(1000);
-      setLogs(res.data || []);
-      setLoading(false);
-    }
-    load();
-  }, [from, to]);
+  async function load() {
+    setLoading(true);
+    const res = await mdb('touch_logs')
+      .select('*, staff(name), offices(name)')
+      .gte('touched_at', `${from}T00:00:00`)
+      .lte('touched_at', `${to}T23:59:59`)
+      .order('touched_at', { ascending: true })
+      .limit(1000);
+    setLogs(res.data || []);
+    setLoading(false);
+  }
+
+  useEffectA(() => { load(); }, [from, to]);
 
   const filtered = useMemoA(() => logs.filter(l => {
     if (officeFilter !== 'all' && l.office_id !== officeFilter) return false;
@@ -290,24 +290,52 @@ function TouchLogPage() {
     return true;
   }), [logs, officeFilter, q]);
 
-  // 1人1日1行に集約
+  // 1人1日1行に集約（ログIDも保持）
   const grouped = useMemoA(() => {
     const map = {};
     filtered.forEach(l => {
       const date = new Date(l.touched_at).toISOString().slice(0, 10);
       const key  = `${l.staff_id}|${date}`;
       if (!map[key]) map[key] = {
-        key, date,
+        key, date, staffId: l.staff_id,
         staffName:  l.staff?.name || '—',
         officeName: l.offices?.name || '—',
+        inId: null, outId: null,
         inTime: null, outTime: null,
+        inRaw: null, outRaw: null,
       };
       const t = new Date(l.touched_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
-      if (l.touch_type === 'in'  && !map[key].inTime)  map[key].inTime  = t;
-      if (l.touch_type === 'out')                       map[key].outTime = t;
+      if (l.touch_type === 'in'  && !map[key].inId)  { map[key].inId  = l.id; map[key].inTime  = t; map[key].inRaw  = l.touched_at; }
+      if (l.touch_type === 'out')                     { map[key].outId = l.id; map[key].outTime = t; map[key].outRaw = l.touched_at; }
     });
     return Object.values(map).sort((a, b) => b.date.localeCompare(a.date) || a.staffName.localeCompare(b.staffName, 'ja'));
   }, [filtered]);
+
+  async function deleteLog(id) {
+    if (!id) return;
+    const { error } = await mdb('touch_logs').delete().eq('id', id);
+    if (error) { showToast('削除に失敗しました', 'error'); return; }
+    showToast('削除しました');
+    await load();
+  }
+
+  async function deleteRow(r) {
+    if (!confirm(`${r.staffName} ${r.date} の打刻を全て削除しますか？`)) return;
+    const ids = [r.inId, r.outId].filter(Boolean);
+    for (const id of ids) await mdb('touch_logs').delete().eq('id', id);
+    showToast('削除しました');
+    await load();
+  }
+
+  async function saveEdit(id, date, hhmm) {
+    // hhmm = "HH:MM", date = "YYYY-MM-DD"
+    const iso = `${date}T${hhmm}:00+09:00`;
+    const { error } = await mdb('touch_logs').update({ touched_at: iso }).eq('id', id);
+    if (error) { showToast('更新に失敗しました', 'error'); return; }
+    showToast('更新しました');
+    setEditTarget(null);
+    await load();
+  }
 
   return (
     <div className="stack">
@@ -341,10 +369,11 @@ function TouchLogPage() {
             <th>日付</th><th>事業所</th><th>スタッフ名</th>
             <th style={{ textAlign:'center' }}>出勤</th>
             <th style={{ textAlign:'center' }}>退勤</th>
+            <th style={{ textAlign:'center' }}>操作</th>
           </tr></thead>
           <tbody>
-            {loading && <tr><td colSpan={6} className="empty">読み込み中...</td></tr>}
-            {!loading && grouped.length === 0 && <tr><td colSpan={6} className="empty">QRログがありません</td></tr>}
+            {loading && <tr><td colSpan={7} className="empty">読み込み中...</td></tr>}
+            {!loading && grouped.length === 0 && <tr><td colSpan={7} className="empty">QRログがありません</td></tr>}
             {grouped.map((r, i) => (
               <tr key={r.key}>
                 <td className="rownum">{i + 1}</td>
@@ -352,16 +381,70 @@ function TouchLogPage() {
                 <td>{r.officeName}</td>
                 <td><strong>{r.staffName}</strong></td>
                 <td className="mono" style={{ textAlign:'center' }}>
-                  {r.inTime  ? <span className="pill done">{r.inTime}</span>  : <span className="muted">—</span>}
+                  {r.inTime ? (
+                    <span style={{ display:'inline-flex', alignItems:'center', gap:4 }}>
+                      <span className="pill done">{r.inTime}</span>
+                      <button className="btn-ghost" style={{ padding:'1px 5px', fontSize:11 }} onClick={() => setEditTarget({ row: r, field: 'in' })}>編集</button>
+                      <button className="btn-ghost danger" style={{ padding:'1px 5px', fontSize:11 }} onClick={() => { if(confirm('出勤打刻を削除しますか？')) deleteLog(r.inId); }}>削除</button>
+                    </span>
+                  ) : <span className="muted">—</span>}
                 </td>
                 <td className="mono" style={{ textAlign:'center' }}>
-                  {r.outTime ? <span className="pill caution">{r.outTime}</span> : <span className="muted">—</span>}
+                  {r.outTime ? (
+                    <span style={{ display:'inline-flex', alignItems:'center', gap:4 }}>
+                      <span className="pill caution">{r.outTime}</span>
+                      <button className="btn-ghost" style={{ padding:'1px 5px', fontSize:11 }} onClick={() => setEditTarget({ row: r, field: 'out' })}>編集</button>
+                      <button className="btn-ghost danger" style={{ padding:'1px 5px', fontSize:11 }} onClick={() => { if(confirm('退勤打刻を削除しますか？')) deleteLog(r.outId); }}>削除</button>
+                    </span>
+                  ) : <span className="muted">—</span>}
+                </td>
+                <td style={{ textAlign:'center' }}>
+                  <button className="btn-ghost danger" style={{ padding:'2px 8px', fontSize:11 }} onClick={() => deleteRow(r)}>行削除</button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
         <div className="sheet-foot">{grouped.length}件</div>
+      </div>
+
+      {editTarget && (
+        <TouchLogEditModal
+          row={editTarget.row}
+          field={editTarget.field}
+          onClose={() => setEditTarget(null)}
+          onSave={saveEdit}
+        />
+      )}
+    </div>
+  );
+}
+
+function TouchLogEditModal({ row, field, onClose, onSave }) {
+  const isIn   = field === 'in';
+  const logId  = isIn ? row.inId  : row.outId;
+  const curRaw = isIn ? row.inRaw : row.outRaw;
+  const curHHMM = curRaw
+    ? new Date(curRaw).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', hour12: false })
+    : '';
+  const [time, setTime] = useStateA(curHHMM);
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="modal" style={{ maxWidth:320 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <h3>{row.staffName} — {row.date} {isIn ? '出勤' : '退勤'}時刻編集</h3>
+          <button className="x" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          <label className="field">
+            <span>{isIn ? '出勤' : '退勤'}時刻</span>
+            <input type="time" value={time} onChange={e => setTime(e.target.value)} style={{ fontSize:18, padding:6 }} />
+          </label>
+        </div>
+        <div className="modal-foot">
+          <button className="btn-ghost" onClick={onClose}>キャンセル</button>
+          <button className="btn-primary" onClick={() => onSave(logId, row.date, time)}>保存</button>
+        </div>
       </div>
     </div>
   );
