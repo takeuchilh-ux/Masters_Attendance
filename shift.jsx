@@ -401,21 +401,23 @@ function GanttView({ staff, shifts, master, year, month }) {
 // ShiftEditModal
 // ============================================================
 function ShiftEditModal({ sel, master, current, onClose, onSave, onDelete, staffName }) {
-  const [typeId, setTypeId] = useStateS(current?.typeId || master[0]?.id || '');
-  const baseM = master.find(m => m.id === typeId);
-  const [start, setStart] = useStateS(fmtTime(current?.override?.start || baseM?.start_time || ''));
-  const [end,   setEnd]   = useStateS(fmtTime(current?.override?.end   || baseM?.end_time   || ''));
+  const [typeId,    setTypeId]    = useStateS(current?.typeId || '');
+  const [overStart, setOverStart] = useStateS(current?.override?.start || '');
+  const [overEnd,   setOverEnd]   = useStateS(current?.override?.end   || '');
 
   function pickType(id) {
     setTypeId(id);
+    // 種別選択時にマスタの時刻をデフォルトとしてセット
     const m = master.find(x => x.id === id);
-    setStart(fmtTime(m?.start_time));
-    setEnd(fmtTime(m?.end_time));
+    setOverStart(fmtTime(m?.start_time) || '');
+    setOverEnd(fmtTime(m?.end_time)     || '');
   }
 
-  const isOverride = baseM && start && (
-    fmtTime(start) !== fmtTime(baseM.start_time) ||
-    fmtTime(end)   !== fmtTime(baseM.end_time)
+  const selectedM = master.find(m => m.id === typeId);
+  const masterStart = fmtTime(selectedM?.start_time) || '';
+  const masterEnd   = fmtTime(selectedM?.end_time)   || '';
+  const isOverride  = typeId && selectedM?.start_time && (
+    overStart !== masterStart || overEnd !== masterEnd
   );
 
   return (
@@ -426,47 +428,66 @@ function ShiftEditModal({ sel, master, current, onClose, onSave, onDelete, staff
           <button className="x" onClick={onClose}>×</button>
         </div>
         <div className="modal-body">
-          <div className="muted">{staffName} ／ {sel.date}</div>
-          <label className="field">
-            <span>シフト種別</span>
-            <div className="shift-pick">
-              {master.map(m => (
-                <button
-                  key={m.id}
-                  type="button"
-                  className={`shift-chip ${typeId === m.id ? 'active' : ''}`}
-                  onClick={() => pickType(m.id)}
-                  style={{ borderColor: typeId === m.id ? '#1e40af' : '#cbd5e1' }}
-                >
-                  <span className="sw" style={{ background: m.color }}></span>
+          <div className="muted" style={{ marginBottom: 12 }}>{staffName} ／ {sel?.date}</div>
+
+          {/* シフト種別選択 */}
+          <div className="shift-pick">
+            <button
+              type="button"
+              className={`shift-chip ${!typeId ? 'active' : ''}`}
+              onClick={() => { setTypeId(''); setOverStart(''); setOverEnd(''); }}
+              style={{ borderColor: !typeId ? '#1e40af' : '#e2e8f0' }}
+            >
+              <strong>— なし —</strong>
+            </button>
+            {master.length === 0 && (
+              <div className="muted small" style={{ padding: '8px 0' }}>
+                ⚠ シフト種別マスタが未登録です。先にシフト種別マスタを登録してください。
+              </div>
+            )}
+            {master.map(m => (
+              <button
+                key={m.id}
+                type="button"
+                className={`shift-chip ${typeId === m.id ? 'active' : ''}`}
+                onClick={() => pickType(m.id)}
+                style={{ borderColor: typeId === m.id ? '#1e40af' : '#cbd5e1' }}
+              >
+                <span className="sw" style={{ background: m.color }}></span>
+                <div>
                   <strong>{m.label}</strong>
                   {m.start_time && (
-                    <span className="mono small">{fmtTime(m.start_time)}-{fmtTime(m.end_time)}</span>
+                    <div className="mono small">{fmtTime(m.start_time)}〜{fmtTime(m.end_time)}</div>
                   )}
-                </button>
-              ))}
-            </div>
-          </label>
-          {baseM?.start_time && (
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* 時刻（選択後に表示・手動上書き可） */}
+          {typeId && selectedM?.start_time && (
             <>
+              <div style={{ marginTop: 12, marginBottom: 4, fontSize: 12, color: 'var(--muted)' }}>
+                時刻を変更する場合のみ修正してください
+              </div>
               <div className="time-edit">
                 <label className="field">
                   <span>開始時刻</span>
-                  <input className="mono" type="time" value={start} onChange={e => setStart(e.target.value)} />
+                  <input className="mono" type="time" value={overStart} onChange={e => setOverStart(e.target.value)} />
                 </label>
                 <label className="field">
                   <span>終了時刻</span>
-                  <input className="mono" type="time" value={end}   onChange={e => setEnd(e.target.value)} />
+                  <input className="mono" type="time" value={overEnd} onChange={e => setOverEnd(e.target.value)} />
                 </label>
               </div>
               {isOverride && (
-                <div className="override-note">⚠ マスタ時間から変更されています（手動調整）</div>
+                <div className="override-note">⚠ マスタ時間から変更されています（個別調整）</div>
               )}
             </>
           )}
         </div>
         <div className="modal-foot">
-          {current && onDelete && (
+          {current?.typeId && onDelete && (
             <button
               className="btn-mini danger"
               style={{ marginRight: 'auto' }}
@@ -474,7 +495,10 @@ function ShiftEditModal({ sel, master, current, onClose, onSave, onDelete, staff
             >🗑 削除</button>
           )}
           <button className="btn-ghost" onClick={onClose}>キャンセル</button>
-          <button className="btn-primary" onClick={() => onSave(typeId, isOverride ? { start, end } : null)}>保存</button>
+          <button
+            className="btn-primary"
+            onClick={() => onSave(typeId, isOverride ? { start: overStart, end: overEnd } : null)}
+          >保存</button>
         </div>
       </div>
     </div>
