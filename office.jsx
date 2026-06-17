@@ -330,8 +330,8 @@ function OfficeShiftPage({ officeId }) {
                             {sm && (
                               <div className="cell-shift" style={{ background: sm.color }}>
                                 <div className="lbl">{sm.label}</div>
-                                {st && <div className="time mono">{st}〜{en}</div>}
-                                {sh?.notes && <div className="lbl" style={{ fontSize:9, opacity:.8 }}>📝</div>}
+                                {st && <div className="time mono">{fmtShort(st)}〜{fmtShort(en)}</div>}
+                                {sh?.notes && <div className="lbl" style={{ fontSize:9, opacity:.8, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:'100%' }}>{sh.notes.length > 6 ? sh.notes.slice(0,6)+'…' : sh.notes}</div>}
                               </div>
                             )}
                           </td>
@@ -377,6 +377,12 @@ function fmtTime(t) {
     }
   }
   return String(t).slice(0, 5);
+}
+function fmtShort(hhmm) {
+  if (!hhmm) return '';
+  const [h, m] = hhmm.split(':').map(Number);
+  const dec = m === 0 ? '' : m === 15 ? '.25' : m === 30 ? '.5' : '.75';
+  return `${h}${dec}`;
 }
 
 function ShiftEditModal({ staffName, date, shiftTypes, current, onClose, onSave, onDelete }) {

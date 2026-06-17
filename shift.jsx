@@ -8,7 +8,6 @@ const { useState: useStateS, useMemo: useMemoS, useContext: useContextS, useEffe
 // ============================================================
 function fmtTime(t) {
   if (!t) return '';
-  // GAS由来のISO文字列対応（後方互換）
   if (typeof t === 'string' && t.includes('T')) {
     const d = new Date(t);
     if (!isNaN(d.getTime())) {
@@ -17,6 +16,13 @@ function fmtTime(t) {
     }
   }
   return String(t).slice(0, 5);
+}
+// セル用簡略表示: "09:30" → "9.5"、"09:00" → "9"
+function fmtShort(hhmm) {
+  if (!hhmm) return '';
+  const [h, m] = hhmm.split(':').map(Number);
+  const dec = m === 0 ? '' : m === 15 ? '.25' : m === 30 ? '.5' : '.75';
+  return `${h}${dec}`;
 }
 
 // ============================================================
@@ -233,8 +239,8 @@ function ShiftPage({ auth }) {
                             {sm && (
                               <div className="cell-shift" style={{ background: sm.color }}>
                                 <div className="lbl">{sm.label}</div>
-                                {start && <div className="time mono">{start}〜{end}</div>}
-                                {sh?.notes && <div className="lbl" style={{ fontSize:9, opacity:.8 }}>📝</div>}
+                                {start && <div className="time mono">{fmtShort(start)}〜{fmtShort(end)}</div>}
+                                {sh?.notes && <div className="lbl" style={{ fontSize:9, opacity:.8, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:'100%' }}>{sh.notes.length > 6 ? sh.notes.slice(0,6)+'…' : sh.notes}</div>}
                               </div>
                             )}
                           </td>
