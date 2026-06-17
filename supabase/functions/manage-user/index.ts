@@ -7,24 +7,37 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // 認証・Auth操作用（デフォルトスキーマ）
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    );
+    // masutaスキーマDB操作用（スキーマを明示的に指定）
+    const masutaDb = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      { db: { schema: 'masuta' } }
     );
 
     // リクエストユーザーの認証確認
     const token = req.headers.get('Authorization')?.replace('Bearer ', '') ?? '';
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
     if (authError || !user) {
+      console.error('auth error:', authError);
       return new Response(JSON.stringify({ error: '認証が必要です' }), {
         status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // 本部権限チェック
-    const { data: caller } = await supabaseAdmin
-      .schema('masuta').from('staff')
-      .select('role').eq('email', user.email).single();
+    // 本部権限チェック（masutaDbで staffテーブルを参照）
+    const { data: callerRows, error: callerError } = await masutaDb
+      .from('staff')
+      .select('role')
+      .eq('email', user.email)
+      .limit(1);
+    const caller = callerRows?.[0];
+    if (callerError) console.error('caller lookup error:', callerError);
+    console.log('caller email:', user.email, 'role:', caller?.role);
     if (caller?.role !== 'admin') {
       return new Response(JSON.stringify({ error: '本部権限が必要です' }), {
         status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -46,7 +59,7 @@ Deno.serve(async (req) => {
       if (error) throw error;
 
       // staff レコード作成（既存なら email を上書き）
-      await supabaseAdmin.schema('masuta').from('staff').upsert({
+      await masutaDb.from('staff').upsert({
         name,
         email,
         office_id: office_id || null,
