@@ -78,6 +78,22 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ── メールアドレス変更 ──────────────────────────────
+    if (action === 'change_email') {
+      const { target_email, new_email } = body;
+
+      const { data: users } = await supabaseAdmin.auth.admin.listUsers();
+      const target = users?.users?.find((u) => u.email === target_email);
+      if (!target) throw new Error('対象ユーザーが見つかりません');
+
+      const { error } = await supabaseAdmin.auth.admin.updateUserById(target.id, { email: new_email });
+      if (error) throw error;
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // ── アカウント削除 ──────────────────────────────────
     if (action === 'delete_user') {
       const { target_email } = body;

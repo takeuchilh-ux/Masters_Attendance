@@ -1226,7 +1226,7 @@ function AccountsPage() {
   const [editing,   setEditing]   = useStateA(null); // 編集対象staff
   const [pwTarget,  setPwTarget]  = useStateA(null); // PW変更対象staff
   const [form,      setForm]      = useStateA({ name:'', email:'', password:'', office_id:'', role:'office_manager' });
-  const [editForm,  setEditForm]  = useStateA({ name:'', office_id:'', role:'office_manager' });
+  const [editForm,  setEditForm]  = useStateA({ name:'', office_id:'', role:'office_manager', email:'' });
   const [pwForm,    setPwForm]    = useStateA({ new_password:'' });
   const [busy,      setBusy]      = useStateA(false);
 
@@ -1267,9 +1267,16 @@ function AccountsPage() {
 
   async function updateAccount() {
     if (!editForm.name.trim()) { showToast('氏名を入力してください', 'error'); return; }
+    if (!editForm.email.trim()) { showToast('メールアドレスを入力してください', 'error'); return; }
     setBusy(true);
     try {
-      const payload = { name: editForm.name, office_id: editForm.office_id || null, role: editForm.role };
+      const newEmail = editForm.email.trim();
+      const oldEmail = editing.email;
+      // メールアドレスが変わった場合はAuth側も更新
+      if (newEmail !== oldEmail) {
+        await callEdge({ action: 'change_email', target_email: oldEmail, new_email: newEmail });
+      }
+      const payload = { name: editForm.name, office_id: editForm.office_id || null, role: editForm.role, email: newEmail };
       const { error } = await mdb('staff').update(payload).eq('id', editing.id);
       if (error) throw new Error(error.message);
       setStaff(ss => ss.map(s => s.id === editing.id ? { ...s, ...payload } : s));
@@ -1330,7 +1337,7 @@ function AccountsPage() {
                   <td><span className="pill role-full">{ROLE_LABELS[s.role] || s.role}</span></td>
                   <td>{office?.name || '—'}</td>
                   <td style={{ display:'flex', gap:4 }}>
-                    <button className="btn-mini" onClick={() => { setEditing(s); setEditForm({ name: s.name, office_id: s.office_id || '', role: s.role }); }}>
+                    <button className="btn-mini" onClick={() => { setEditing(s); setEditForm({ name: s.name, office_id: s.office_id || '', role: s.role, email: s.email || '' }); }}>
                       ✏️ 編集
                     </button>
                     <button className="btn-mini" onClick={() => { setPwTarget(s); setPwForm({ new_password:'' }); }}>
@@ -1418,7 +1425,10 @@ function AccountsPage() {
                   </select>
                 </label>
               </div>
-              <p className="hint" style={{ marginTop:8 }}>※ メールアドレスの変更は Supabase ダッシュボードから行ってください</p>
+              <label className="field">
+                <span>メールアドレス（ログイン用）</span>
+                <input type="email" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} placeholder="manager@example.com" />
+              </label>
             </div>
             <div className="modal-foot">
               <button className="btn-ghost" onClick={() => setEditing(null)}>キャンセル</button>
