@@ -655,19 +655,27 @@ function StaffAdminPage() {
   async function saveStaff(form) {
     // last_name/first_name はUI用フィールドのため除外
     const { last_name, first_name, ...dbForm } = form;
+    // 空文字列はnullに変換（unique制約回避）
+    if (dbForm.email === '') dbForm.email = null;
+    if (dbForm.birth_mmdd === '') dbForm.birth_mmdd = null;
+
     if (dbForm.id) {
       const { id, ...rest } = dbForm;
       const { error } = await mdb('staff').update(rest).eq('id', id);
-      if (!error) {
-        setStaff(ss => ss.map(s => s.id === id ? { ...s, ...rest } : s));
-        showToast('スタッフを更新しました');
+      if (error) {
+        showToast('更新に失敗しました: ' + error.message, 'error');
+        return;
       }
+      setStaff(ss => ss.map(s => s.id === id ? { ...s, ...rest } : s));
+      showToast('スタッフを更新しました');
     } else {
       const { data, error } = await mdb('staff').insert({ ...dbForm, is_active: true }).select().single();
-      if (!error && data) {
-        setStaff(ss => [...ss, data]);
-        showToast('スタッフを登録しました');
+      if (error) {
+        showToast('登録に失敗しました: ' + error.message, 'error');
+        return;
       }
+      if (data) setStaff(ss => [...ss, data]);
+      showToast('スタッフを登録しました');
     }
     setEditing(null);
   }
