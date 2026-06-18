@@ -1662,31 +1662,29 @@ function AccountsPage() {
 // ============================================================
 // ManualTouchPage - 管理者手動打刻
 // ============================================================
+const FUJISAWA_OFFICE_ID = '416ff2a2-76f6-4087-b1de-86e1412dfd0b';
+
 function ManualTouchPage() {
-  const { offices, staff: allStaff, showToast } = useContextA(AppCtx);
-  const [officeFilter, setOfficeFilter] = useStateA(offices[0]?.id || '');
-  const [todayLogs,    setTodayLogs]    = useStateA([]); // 今日の全touch_logs
-  const [busy,         setBusy]         = useStateA(null); // staffId|type
+  const { staff: allStaff, showToast } = useContextA(AppCtx);
+  const [todayLogs, setTodayLogs] = useStateA([]);
+  const [busy,      setBusy]      = useStateA(null);
 
   const today = new Date().toISOString().slice(0, 10);
-
-  useEffectA(() => {
-    if (offices.length > 0 && !officeFilter) setOfficeFilter(offices[0].id);
-  }, [offices]);
 
   useEffectA(() => { loadToday(); }, []);
 
   async function loadToday() {
     const { data } = await mdb('touch_logs')
       .select('*')
+      .eq('office_id', FUJISAWA_OFFICE_ID)
       .gte('touched_at', `${today}T00:00:00`)
       .lte('touched_at', `${today}T23:59:59`);
     setTodayLogs(data || []);
   }
 
   const staffList = useMemoA(() =>
-    allStaff.filter(s => s.is_worker !== false && (officeFilter === 'all' || s.office_id === officeFilter)),
-    [allStaff, officeFilter]
+    allStaff.filter(s => s.is_worker !== false && s.office_id === FUJISAWA_OFFICE_ID),
+    [allStaff]
   );
 
   function getLog(staffId, type) {
@@ -1719,18 +1717,11 @@ function ManualTouchPage() {
   return (
     <div className="stack">
       <div className="page-head">
-        <div><h1>打刻</h1><p className="muted">今日（{today}）の出退勤を手動で記録・確認できます</p></div>
+        <div><h1>打刻</h1><p className="muted">今日（{today}）藤沢事業所の出退勤を記録・確認できます</p></div>
       </div>
 
       <div className="card">
         <div className="filter-bar">
-          <label className="field inline">
-            <span>事業所</span>
-            <select value={officeFilter} onChange={e => setOfficeFilter(e.target.value)}>
-              <option value="all">すべて</option>
-              {offices.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-            </select>
-          </label>
           <button className="btn-ghost" onClick={loadToday}>🔄 更新</button>
         </div>
 

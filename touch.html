@@ -51,6 +51,7 @@
 <script type="text/babel">
 const { useState, useEffect, useRef } = React;
 
+const FUJISAWA_OFFICE_ID = '416ff2a2-76f6-4087-b1de-86e1412dfd0b';
 const SUPABASE_URL  = 'https://dzwsdmcffrubjimnrfyf.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR6d3NkbWNmZnJ1YmppbW5yZnlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3MjkxODAsImV4cCI6MjA5NDMwNTE4MH0.VXEGijG64gi9TMWDhrvZE6qcs0ZnArbZRrquGbpN-Kg';
 const supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
@@ -103,6 +104,14 @@ function App() {
 
   if (loading) return <div style={{ textAlign:'center', padding:40, color:'#64748b' }}>読み込み中...</div>;
   if (!session || !profile) return <LoginScreen />;
+  if (profile.office_id !== FUJISAWA_OFFICE_ID) return (
+    <div className="card" style={{ textAlign:'center' }}>
+      <div style={{ fontSize:40, marginBottom:16 }}>🔒</div>
+      <h1 style={{ fontSize:18, marginBottom:8 }}>利用できません</h1>
+      <p className="muted" style={{ marginBottom:24 }}>この打刻画面は藤沢事業所専用です。</p>
+      <button className="btn btn-ghost" onClick={() => supa.auth.signOut()}>ログアウト</button>
+    </div>
+  );
   return <ClockScreen profile={profile} />;
 }
 
