@@ -238,9 +238,11 @@ function AdminShell({ profile }) {
   const [sideOpen, setSideOpen] = useState(true);
   const { dbStatus, unreadAlerts } = useContext(AppCtx);
 
+  const isFujisawa = profile?.office_id === '416ff2a2-76f6-4087-b1de-86e1412dfd0b';
+
   const navItems = [
     { id: 'dashboard', label: 'ダッシュボード', icon: '🏠' },
-    { id: 'touch',     label: '打刻',           icon: '⏱' },
+    ...(isFujisawa ? [{ id: 'touch', label: '打刻', icon: '⏱' }] : []),
     { id: 'shift',     label: 'シフト',         icon: '📅' },
     { id: 'requests',  label: '申請一覧',        icon: '📝' },
     { id: 'monthly',   label: '月次集計',        icon: '📊' },

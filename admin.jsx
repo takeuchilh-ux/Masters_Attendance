@@ -1746,10 +1746,7 @@ function ManualTouchPage() {
                   <td className="muted" style={{ fontSize: 12 }}>{office?.name || '—'}</td>
                   <td>
                     {inLog ? (
-                      <span style={{ display:'flex', alignItems:'center', gap:6 }}>
-                        <span style={{ background:'#dcfce7', color:'#16a34a', borderRadius:6, padding:'2px 10px', fontWeight:700, fontSize:14, fontFamily:'monospace' }}>{fmtTime(inLog.touched_at)}</span>
-                        <button className="btn-mini danger" onClick={() => deleteLog(inLog.id)} title="削除">✕</button>
-                      </span>
+                      <span style={{ background:'#dcfce7', color:'#16a34a', borderRadius:6, padding:'2px 10px', fontWeight:700, fontSize:14, fontFamily:'monospace', display:'inline-block' }}>{fmtTime(inLog.touched_at)}</span>
                     ) : (
                       <button
                         className="btn-mini"
@@ -1761,9 +1758,7 @@ function ManualTouchPage() {
                   </td>
                   <td>
                     {outLog ? (
-                      <span style={{ display:'flex', alignItems:'center', gap:6 }}>
-                        <span style={{ background:'#fee2e2', color:'#dc2626', borderRadius:6, padding:'2px 10px', fontWeight:700, fontSize:14, fontFamily:'monospace' }}>{fmtTime(outLog.touched_at)}</span>
-                        <button className="btn-mini danger" onClick={() => deleteLog(outLog.id)} title="削除">✕</button>
+                      <span style={{ background:'#fee2e2', color:'#dc2626', borderRadius:6, padding:'2px 10px', fontWeight:700, fontSize:14, fontFamily:'monospace', display:'inline-block' }}>{fmtTime(outLog.touched_at)}</span>
                       </span>
                     ) : (
                       <button
