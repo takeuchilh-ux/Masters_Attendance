@@ -1277,11 +1277,13 @@ function AccountsPage() {
       }
       const payload = { name: editForm.name, office_id: editForm.office_id || null, role: editForm.role, email: newEmail };
       const { error } = await mdb('staff').update(payload).eq('id', editing.id);
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(error.message || error.details || JSON.stringify(error));
       setStaff(ss => ss.map(s => s.id === editing.id ? { ...s, ...payload } : s));
       showToast('アカウントを更新しました');
       setEditing(null);
-    } catch(e) { showToast(e.message, 'error'); }
+    } catch(e) {
+      showToast(e.message || '更新に失敗しました', 'error');
+    }
     setBusy(false);
   }
 
