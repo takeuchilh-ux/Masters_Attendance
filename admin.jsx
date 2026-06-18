@@ -1346,7 +1346,7 @@ function AccountsPage() {
                     <button className="btn-mini" onClick={() => { setPwTarget(s); setPwForm({ new_password:'' }); }} disabled={!s.email || busy} title={!s.email ? 'メールアドレスがないためPW変更不可' : ''}>
                       🔑 PW変更
                     </button>
-                    <button className="btn-mini btn-danger" onClick={() => deleteAccount(s)} disabled={!s.email || busy} title={!s.email ? 'メールアドレスがないため削除不可' : ''}>
+                    <button className="btn-mini btn-danger" onClick={() => deleteAccount(s)} disabled={busy}>
                       🗑 削除
                     </button>
                   </td>
