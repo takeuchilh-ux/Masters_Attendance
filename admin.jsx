@@ -678,6 +678,7 @@ function StaffAdminPage() {
   });
 
   const filtered = useMemoA(() => staff.filter(s =>
+    s.role === 'staff' &&
     (officeFilter === 'all' || s.office_id === officeFilter) &&
     (!q || s.name.includes(q))
   ), [staff, officeFilter, q]);
