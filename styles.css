@@ -226,6 +226,12 @@ button { font-family: inherit; cursor: pointer; }
 .topclock { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--ink2); }
 .topclock strong { font-family: 'JetBrains Mono', monospace; font-size: 15px; color: var(--ink); font-weight: 600; }
 
+/* ドラッグ＆ドロップ */
+.drag-handle { cursor: grab; color: var(--muted); padding: 0 6px; font-size: 16px; user-select: none; line-height: 1; }
+.drag-handle:hover { color: var(--ink2); }
+.drag-handle:active { cursor: grabbing; }
+.sortable-ghost td { background: #e0f2fe !important; opacity: .6; }
+
 .page { flex: 1; overflow: auto; padding: 24px; background: var(--bg); }
 .stack { display: flex; flex-direction: column; gap: 16px; }
 .page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }

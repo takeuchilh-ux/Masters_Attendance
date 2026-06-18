@@ -1,7 +1,29 @@
 // ============================================================
 // MasuTa! 大本管理者 - 各ページ
 // ============================================================
-const { useState: useStateA, useEffect: useEffectA, useMemo: useMemoA, useContext: useContextA } = React;
+const { useState: useStateA, useEffect: useEffectA, useMemo: useMemoA, useContext: useContextA, useRef: useRefA } = React;
+
+// ドラッグ＆ドロップ（SortableJS）ヘルパー
+function useSortableRows(tbodyRef, onReorder) {
+  const reorderRef = useRefA(null);
+  reorderRef.current = onReorder;
+  useEffectA(() => {
+    const el = tbodyRef.current;
+    if (!el || typeof Sortable === 'undefined') return;
+    const s = Sortable.create(el, {
+      handle: '.drag-handle',
+      delay: 300,
+      delayOnTouchOnly: true,
+      animation: 150,
+      ghostClass: 'sortable-ghost',
+      onEnd: () => {
+        const ids = [...el.querySelectorAll('tr[data-id]')].map(r => r.dataset.id);
+        reorderRef.current(ids);
+      },
+    });
+    return () => s.destroy();
+  }, []);
+}
 
 // ============================================================
 // DashboardPage - 全事業所の今日の出欠（タブ切替）
@@ -646,6 +668,14 @@ function StaffAdminPage() {
   const [q,            setQ]            = useStateA('');
   const [editing,      setEditing]      = useStateA(null);
   const [viewing,      setViewing]      = useStateA(null);
+  const tbodyRef = useRefA(null);
+
+  useSortableRows(tbodyRef, async (ids) => {
+    const reordered = ids.map(id => staff.find(s => s.id === id)).filter(Boolean);
+    const others = staff.filter(s => !ids.includes(s.id));
+    setStaff([...reordered, ...others]);
+    await Promise.all(reordered.map((s, i) => mdb('staff').update({ sort_order: (i+1)*10 }).eq('id', s.id)));
+  });
 
   const filtered = useMemoA(() => staff.filter(s =>
     (officeFilter === 'all' || s.office_id === officeFilter) &&
@@ -729,15 +759,16 @@ function StaffAdminPage() {
 
         <table className="sheet">
           <thead><tr>
-            <th className="rownum"></th><th>氏名</th><th>事業所</th><th>権限</th>
+            <th style={{width:32}}></th><th className="rownum"></th><th>氏名</th><th>事業所</th><th>権限</th>
             <th>生年月日</th><th>登録日</th><th>操作</th>
           </tr></thead>
-          <tbody>
-            {filtered.length === 0 && <tr><td colSpan={7} className="empty">スタッフがいません</td></tr>}
+          <tbody ref={tbodyRef}>
+            {filtered.length === 0 && <tr><td colSpan={8} className="empty">スタッフがいません</td></tr>}
             {filtered.map((s, i) => {
               const office = offices.find(o => o.id === s.office_id);
               return (
-                <tr key={s.id}>
+                <tr key={s.id} data-id={s.id}>
+                  <td><span className="drag-handle">⠿</span></td>
                   <td className="rownum">{i + 1}</td>
                   <td>
                     <div className="row-name" style={{ cursor: 'pointer' }} onClick={() => setViewing(s)}>
@@ -971,8 +1002,14 @@ function OfficesPage() {
   const [editing,  setEditing]  = useStateA(null);
   const [qrOffice, setQrOffice] = useStateA(null);
   const [geocoding, setGeocoding] = useStateA(false);
-
   const [saving, setSaving] = useStateA(false);
+  const tbodyRef = useRefA(null);
+
+  useSortableRows(tbodyRef, async (ids) => {
+    const reordered = ids.map(id => offices.find(o => o.id === id)).filter(Boolean);
+    setOffices(reordered);
+    await Promise.all(reordered.map((o, i) => mdb('offices').update({ sort_order: (i+1)*10 }).eq('id', o.id)));
+  });
 
   async function saveOffice(form) {
     setSaving(true);
@@ -1053,12 +1090,13 @@ function OfficesPage() {
       <div className="card">
         <table className="sheet">
           <thead><tr>
-            <th className="rownum"></th><th>事業所名</th><th>住所</th><th>位置情報</th><th>操作</th>
+            <th style={{width:32}}></th><th className="rownum"></th><th>事業所名</th><th>住所</th><th>位置情報</th><th>操作</th>
           </tr></thead>
-          <tbody>
-            {offices.length === 0 && <tr><td colSpan={5} className="empty">事業所がありません</td></tr>}
+          <tbody ref={tbodyRef}>
+            {offices.length === 0 && <tr><td colSpan={6} className="empty">事業所がありません</td></tr>}
             {offices.map((o, i) => (
-              <tr key={o.id}>
+              <tr key={o.id} data-id={o.id}>
+                <td><span className="drag-handle">⠿</span></td>
                 <td className="rownum">{i+1}</td>
                 <td><strong>{o.name}</strong></td>
                 <td style={{ fontSize:12 }}>{o.address || <span className="muted">未設定</span>}</td>
@@ -1228,16 +1266,24 @@ function OfficeQRModal({ office, onClose }) {
 function AccountsPage() {
   const { offices, staff, setStaff, showToast, reload } = useContextA(AppCtx);
   const [creating,  setCreating]  = useStateA(false);
-  const [editing,   setEditing]   = useStateA(null); // 編集対象staff
-  const [pwTarget,  setPwTarget]  = useStateA(null); // PW変更対象staff
+  const [editing,   setEditing]   = useStateA(null);
+  const [pwTarget,  setPwTarget]  = useStateA(null);
   const [form,      setForm]      = useStateA({ name:'', email:'', password:'', office_id:'', role:'office_manager' });
   const [editForm,  setEditForm]  = useStateA({ name:'', office_id:'', role:'office_manager', email:'' });
   const [pwForm,    setPwForm]    = useStateA({ new_password:'' });
   const [busy,      setBusy]      = useStateA(false);
+  const tbodyRef = useRefA(null);
 
   const managed = useMemoA(() =>
-    staff.filter(s => s.role === 'office_manager' || s.role === 'admin').sort((a,b) => a.name.localeCompare(b.name,'ja')),
+    staff.filter(s => s.role === 'office_manager' || s.role === 'admin'),
     [staff]);
+
+  useSortableRows(tbodyRef, async (ids) => {
+    const reordered = ids.map(id => staff.find(s => s.id === id)).filter(Boolean);
+    const others = staff.filter(s => !ids.includes(s.id));
+    setStaff([...reordered, ...others]);
+    await Promise.all(reordered.map((s, i) => mdb('staff').update({ sort_order: (i+1)*10 }).eq('id', s.id)));
+  });
 
   const set   = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const setPw = (k, v) => setPwForm(f => ({ ...f, [k]: v }));
@@ -1340,15 +1386,16 @@ function AccountsPage() {
       <div className="card">
         <table className="sheet">
           <thead><tr>
-            <th className="rownum"></th><th>氏名</th><th>メールアドレス</th>
+            <th style={{width:32}}></th><th className="rownum"></th><th>氏名</th><th>メールアドレス</th>
             <th>権限</th><th>事業所</th><th>操作</th>
           </tr></thead>
-          <tbody>
-            {managed.length === 0 && <tr><td colSpan={6} className="empty">アカウントがありません</td></tr>}
+          <tbody ref={tbodyRef}>
+            {managed.length === 0 && <tr><td colSpan={7} className="empty">アカウントがありません</td></tr>}
             {managed.map((s, i) => {
               const office = offices.find(o => o.id === s.office_id);
               return (
-                <tr key={s.id}>
+                <tr key={s.id} data-id={s.id}>
+                  <td><span className="drag-handle">⠿</span></td>
                   <td className="rownum">{i+1}</td>
                   <td><strong>{s.name}</strong></td>
                   <td className="mono" style={{ fontSize:12 }}>{s.email || <span className="muted">—</span>}</td>

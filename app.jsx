@@ -46,8 +46,8 @@ function AppProvider({ children }) {
   async function loadMaster() {
     try {
       const [offRes, stRes, stypeRes, alertRes] = await Promise.all([
-        mdb('offices').select('*').order('name'),
-        mdb('staff').select('*').eq('is_active', true).order('name'),
+        mdb('offices').select('*').order('sort_order').order('name'),
+        mdb('staff').select('*').eq('is_active', true).order('sort_order').order('name'),
         mdb('shift_types').select('*').order('label'),
         mdb('alerts')
           .select('*, staff(name), offices(name), requests(type, date, reason)')
