@@ -57,10 +57,10 @@ function ShiftPage({ auth }) {
   useEffectS(() => {
     if (!officeId) return;
     if (officeId === 'ALL') {
-      mdb('staff').select('*').eq('is_active', true).order('sort_order').order('name')
+      mdb('staff').select('*').eq('is_active', true).eq('is_worker', true).order('sort_order').order('name')
         .then(({ data }) => setOfficeStaff(data || []));
     } else {
-      mdb('staff').select('*').eq('office_id', officeId).eq('is_active', true).order('sort_order').order('name')
+      mdb('staff').select('*').eq('office_id', officeId).eq('is_active', true).eq('is_worker', true).order('sort_order').order('name')
         .then(({ data }) => setOfficeStaff(data || []));
     }
   }, [officeId]);
