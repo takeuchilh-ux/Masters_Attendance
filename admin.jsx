@@ -1665,7 +1665,7 @@ function AccountsPage() {
 const FUJISAWA_OFFICE_ID = '416ff2a2-76f6-4087-b1de-86e1412dfd0b';
 
 function ManualTouchPage() {
-  const { staff: allStaff, showToast } = useContextA(AppCtx);
+  const { offices, staff: allStaff, showToast } = useContextA(AppCtx);
   const [todayLogs, setTodayLogs] = useStateA([]);
   const [busy,      setBusy]      = useStateA(null);
 
