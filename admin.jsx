@@ -1701,7 +1701,6 @@ function ManualTouchPage() {
       office_id:  officeId,
       touch_type: type,
       touched_at: new Date().toISOString(),
-      source:     'manual',
     });
     if (error) { showToast('エラーが発生しました', 'error'); setBusy(null); return; }
     await loadToday();

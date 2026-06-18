@@ -175,7 +175,6 @@ function ClockScreen({ profile }) {
       office_id:  profile.office_id,
       touch_type: type,
       touched_at: new Date().toISOString(),
-      source:     'web',
     });
     if (error) { showToast('エラーが発生しました'); setBusy(false); return; }
     await loadToday();
