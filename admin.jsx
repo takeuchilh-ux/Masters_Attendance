@@ -685,7 +685,12 @@ function StaffAdminPage() {
   }
 
   async function deleteStaff(id) {
-    if (!confirm('このスタッフを削除しますか？')) return;
+    const target = staff.find(s => s.id === id);
+    if (target?.role === 'office_manager' || target?.role === 'admin') {
+      if (!confirm(`「${target.name}」はログインアカウントが設定されています。\nスタッフ削除するとアカウント管理からも消えます。\n本当に削除しますか？`)) return;
+    } else {
+      if (!confirm('このスタッフを削除しますか？')) return;
+    }
     const { error } = await mdb('staff').update({ is_active: false }).eq('id', id);
     if (!error) {
       setStaff(ss => ss.filter(s => s.id !== id));
