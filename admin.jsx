@@ -1278,9 +1278,13 @@ function AccountsPage() {
       const { error } = await mdb('staff').update(payload).eq('id', editing.id);
       if (error) throw new Error(error.message || error.details || JSON.stringify(error));
 
-      // 2. Auth側のメール変更（DBが更新された後、セッション無効化されても問題なし）
+      // 2. Auth側のメール変更（失敗してもDB変更は確定済みのため警告のみ）
       if (emailChanged) {
-        await callEdge({ action: 'change_email', target_email: oldEmail, new_email: newEmail });
+        try {
+          await callEdge({ action: 'change_email', target_email: oldEmail, new_email: newEmail });
+        } catch(authErr) {
+          console.warn('Auth email change skipped:', authErr.message);
+        }
       }
 
       setStaff(ss => ss.map(s => s.id === editing.id ? { ...s, ...payload } : s));
