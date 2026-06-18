@@ -1339,10 +1339,10 @@ function AccountsPage() {
                     <button className="btn-mini" onClick={() => { setEditing(s); setEditForm({ name: s.name, office_id: s.office_id || '', role: s.role, email: s.email || '' }); }}>
                       ✏️ 編集
                     </button>
-                    <button className="btn-mini" onClick={() => { setPwTarget(s); setPwForm({ new_password:'' }); }}>
+                    <button className="btn-mini" onClick={() => { setPwTarget(s); setPwForm({ new_password:'' }); }} disabled={!s.email || busy} title={!s.email ? 'メールアドレスがないためPW変更不可' : ''}>
                       🔑 PW変更
                     </button>
-                    <button className="btn-mini btn-danger" onClick={() => deleteAccount(s)} disabled={busy}>
+                    <button className="btn-mini btn-danger" onClick={() => deleteAccount(s)} disabled={!s.email || busy} title={!s.email ? 'メールアドレスがないため削除不可' : ''}>
                       🗑 削除
                     </button>
                   </td>
