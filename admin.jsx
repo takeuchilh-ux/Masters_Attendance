@@ -517,10 +517,11 @@ function MonthlyDetailTable({ sShifts, sTouches, sRequests, shiftTypesDB }) {
     const st      = shiftTypesDB.find(t => t.id === sh.shift_type_id);
     const start   = (sh.override_start || st?.start_time || '').slice(0, 5);
     const end     = (sh.override_end   || st?.end_time   || '').slice(0, 5);
-    const touch   = sTouches.find(t => t.touched_at?.slice(0, 10) === sh.date);
-    const touchTime = touch
-      ? new Date(touch.touched_at).toLocaleTimeString('ja-JP', { hour:'2-digit', minute:'2-digit', timeZone:'Asia/Tokyo' })
-      : null;
+    const toHHMM = ts => ts ? new Date(ts).toLocaleTimeString('ja-JP', { hour:'2-digit', minute:'2-digit', timeZone:'Asia/Tokyo' }) : null;
+    const touchIn  = sTouches.find(t => t.touch_type === 'in'  && t.touched_at?.slice(0, 10) === sh.date);
+    const touchOut = sTouches.find(t => t.touch_type === 'out' && t.touched_at?.slice(0, 10) === sh.date);
+    const touchInTime  = toHHMM(touchIn?.touched_at);
+    const touchOutTime = toHHMM(touchOut?.touched_at);
     const reqs    = sRequests.filter(r => r.date === sh.date);
     const d       = new Date(sh.date);
     const dow     = d.getDay();
@@ -532,7 +533,7 @@ function MonthlyDetailTable({ sShifts, sTouches, sRequests, shiftTypesDB }) {
       workMin = (eh_ * 60 + em_) - (sh_ * 60 + sm_) - (st?.break_minutes || 0);
     }
 
-    return { date: sh.date, dow, label: st?.label || '—', color: st?.color, start, end, workMin, touchTime, reqs };
+    return { date: sh.date, dow, label: st?.label || '—', color: st?.color, start, end, workMin, touchInTime, touchOutTime, reqs };
   }).sort((a, b) => a.date.localeCompare(b.date));
 
   return (
@@ -565,10 +566,15 @@ function MonthlyDetailTable({ sShifts, sTouches, sRequests, shiftTypesDB }) {
               <td style={{ padding:'4px 8px', textAlign:'center', fontFamily:'monospace', color:'#475569' }}>
                 {d.start && d.end ? `${d.start} 〜 ${d.end}` : '—'}
               </td>
-              <td style={{ padding:'4px 8px', textAlign:'center', fontFamily:'monospace' }}>
-                {d.touchTime
-                  ? <span style={{ color:'#16a34a', fontWeight:600 }}>{d.touchTime}</span>
-                  : <span style={{ color:'#94a3b8' }}>未打刻</span>}
+              <td style={{ padding:'4px 8px', textAlign:'center', fontFamily:'monospace', whiteSpace:'nowrap' }}>
+                {!d.touchInTime && !d.touchOutTime
+                  ? <span style={{ color:'#94a3b8' }}>未打刻</span>
+                  : <span style={{ color:'#16a34a', fontWeight:600 }}>
+                      {d.touchInTime || '—'}
+                      <span style={{ color:'#94a3b8', fontWeight:400, margin:'0 3px' }}>→</span>
+                      {d.touchOutTime || <span style={{ color:'#f59e0b' }}>未退勤</span>}
+                    </span>
+                }
               </td>
               <td style={{ padding:'4px 8px', color:'#64748b' }}>
                 {d.reqs.length === 0 ? <span style={{ color:'#cbd5e1' }}>—</span>
@@ -623,10 +629,9 @@ function MonthlyPage() {
         mdb('shifts').select('*').gte('date', start).lte('date', end),
         mdb('shift_types').select('*'),
         mdb('requests').select('*').gte('date', start).lte('date', end).eq('status', 'approved'),
-        mdb('touch_logs').select('staff_id, touched_at')
+        mdb('touch_logs').select('staff_id, touched_at, touch_type')
           .gte('touched_at', `${start}T00:00:00`)
-          .lte('touched_at', `${end}T23:59:59`)
-          .eq('touch_type', 'in'),
+          .lte('touched_at', `${end}T23:59:59`),
       ]);
       setShifts(sRes.data || []);
       setShiftTypesDB(stRes.data || []);
@@ -648,7 +653,7 @@ function MonthlyPage() {
       const sRequests = requests.filter(r => r.staff_id === s.id);
 
       const shiftDays   = sShifts.length;
-      const presentDays = sTouches.length;
+      const presentDays = sTouches.filter(t => t.touch_type === 'in').length;
       const absentDays  = Math.max(0, shiftDays - presentDays);
 
       const paidLeave = sRequests
