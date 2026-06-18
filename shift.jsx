@@ -38,14 +38,15 @@ function ShiftPage({ auth }) {
 
   const [year,   setYear]   = useStateS(new Date().getFullYear());
   const [month,  setMonth]  = useStateS(new Date().getMonth() + 1);
-  const [officeId, setOfficeId] = useStateS('');
+  const [officeId, setOfficeId] = useStateS('ALL');
   const [view,   setView]   = useStateS('month'); // month | week | gantt
   const [shifts, setShifts] = useStateS({}); // key: staffId|date
   const [officeStaff, setOfficeStaff] = useStateS([]);
   const [editing, setEditing] = useStateS(null);
   const [loadingShifts, setLoadingShifts] = useStateS(false);
+  const [masterOpen, setMasterOpen] = useStateS(false);
 
-  // 事業所リストが読み込まれたら最初の事業所を選択
+  // 事業所リストが読み込まれたら（officeIdが空の場合のみ）最初の事業所を選択
   useEffectS(() => {
     if (offices.length > 0 && !officeId) {
       setOfficeId(offices[0].id);
@@ -55,8 +56,13 @@ function ShiftPage({ auth }) {
   // 選択事業所のスタッフを取得
   useEffectS(() => {
     if (!officeId) return;
-    mdb('staff').select('*').eq('office_id', officeId).eq('is_active', true).order('name')
-      .then(({ data }) => setOfficeStaff(data || []));
+    if (officeId === 'ALL') {
+      mdb('staff').select('*').eq('is_active', true).order('sort_order').order('name')
+        .then(({ data }) => setOfficeStaff(data || []));
+    } else {
+      mdb('staff').select('*').eq('office_id', officeId).eq('is_active', true).order('sort_order').order('name')
+        .then(({ data }) => setOfficeStaff(data || []));
+    }
   }, [officeId]);
 
   // 選択事業所・月のシフトを取得
@@ -88,7 +94,7 @@ function ShiftPage({ auth }) {
 
   // 事業所のシフト種別
   const shiftMaster = useMemoS(() =>
-    allShiftTypes.filter(t => t.office_id === officeId),
+    officeId === 'ALL' ? allShiftTypes : allShiftTypes.filter(t => t.office_id === officeId),
     [allShiftTypes, officeId]
   );
 
@@ -115,7 +121,7 @@ function ShiftPage({ auth }) {
 
     const payload = {
       staff_id:       staffId,
-      office_id:      officeId,
+      office_id:      officeId === 'ALL' ? (editing?.officeId || officeId) : officeId,
       date:           iso,
       shift_type_id:  typeId,
       override_start: override?.start || null,
@@ -170,10 +176,19 @@ function ShiftPage({ auth }) {
 
           <label className="field inline" style={{ background: '#fff', padding: '4px 10px', border: '1px solid var(--line-strong)', borderRadius: 6 }}>
             <span style={{ fontSize: 11, color: 'var(--muted)', marginRight: 4 }}>事業所</span>
-            <select value={officeId} onChange={e => setOfficeId(e.target.value)} style={{ border: 'none', background: 'transparent', padding: '4px 0', fontSize: 13 }}>
+            <select value={officeId} onChange={e => { setOfficeId(e.target.value); setMasterOpen(false); }} style={{ border: 'none', background: 'transparent', padding: '4px 0', fontSize: 13 }}>
+              <option value="ALL">ALL</option>
               {offices.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
             </select>
           </label>
+
+          {officeId !== 'ALL' && (
+            <button
+              className={masterOpen ? 'btn-primary' : 'btn-ghost'}
+              style={{ fontSize: 12, padding: '4px 10px' }}
+              onClick={() => setMasterOpen(o => !o)}
+            >⚙ 種別編集</button>
+          )}
 
           <div className="view-tabs">
             <button className={view === 'month' ? 'active' : ''} onClick={() => setView('month')}>月</button>
@@ -181,88 +196,54 @@ function ShiftPage({ auth }) {
             <button className={view === 'gantt' ? 'active' : ''} onClick={() => setView('gantt')}>日</button>
           </div>
 
-          <div className="legend">
-            {shiftMaster.map(t => (
-              <span key={t.id} className="leg">
-                <span className="sw" style={{ background: t.color }}></span>
-                {t.label}
-                {t.start_time && ` ${fmtTime(t.start_time)}-${fmtTime(t.end_time)}`}
-              </span>
-            ))}
-          </div>
+          {officeId !== 'ALL' && (
+            <div className="legend">
+              {shiftMaster.map(t => (
+                <span key={t.id} className="leg">
+                  <span className="sw" style={{ background: t.color }}></span>
+                  {t.label}
+                  {t.start_time && ` ${fmtTime(t.start_time)}-${fmtTime(t.end_time)}`}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {loadingShifts && (
           <div style={{ padding: 24, textAlign: 'center' }} className="muted">読み込み中...</div>
         )}
 
-        {!loadingShifts && view === 'month' && (
-          <div className="shift-matrix-wrap">
-            <table className="shift-matrix">
-              <thead>
-                <tr>
-                  <th className="sticky-l">スタッフ</th>
-                  {days.map(d => (
-                    <th key={d.n} className={`day-h ${d.dow === 0 ? 'sun' : d.dow === 6 ? 'sat' : ''}`}>
-                      <div className="dn">{d.n}</div>
-                      <div className="dw">{['日','月','火','水','木','金','土'][d.dow]}</div>
-                    </th>
-                  ))}
-                  <th className="total">合計</th>
-                </tr>
-              </thead>
-              <tbody>
-                {officeStaff.map(s => {
-                  let totalH = 0, kyukeiCnt = 0, yukyuCnt = 0, kyuCnt = 0;
-                  return (
-                    <tr key={s.id}>
-                      <td className="sticky-l">
-                        <div className="row-name">
-                          <span className="avatar sm">{s.name.slice(0, 1)}</span>
-                          <strong>{s.name}</strong>
-                        </div>
-                      </td>
-                      {days.map(d => {
-                        const sh  = shifts[`${s.id}|${d.iso}`];
-                        const sm  = sh ? shiftMaster.find(x => x.id === sh.typeId) : null;
-                        const start = fmtTime(sh?.override?.start || sm?.start_time);
-                        const end   = fmtTime(sh?.override?.end   || sm?.end_time);
-                        if (start && end) {
-                          const [ih, im] = start.split(':').map(Number);
-                          const [oh, om] = end.split(':').map(Number);
-                          totalH += (oh * 60 + om - ih * 60 - im - (sm?.break_minutes || 60)) / 60;
-                        }
-                        if (sm?.label === '公休') kyukeiCnt++;
-                        if (sm?.label === '有給') yukyuCnt++;
-                        if (sm?.label === '休')   kyuCnt++;
-                        return (
-                          <td
-                            key={d.n}
-                            className={`shift-cell ${d.dow === 0 ? 'sun' : d.dow === 6 ? 'sat' : ''}`}
-                            onClick={() => setEditing({ staffId: s.id, date: d.iso })}
-                          >
-                            {sm && (
-                              <div className="cell-shift" style={{ background: sm.color }}>
-                                <div className="lbl">{sm.label}</div>
-                                {start && <div className="time mono">{fmtShort(start)}〜{fmtShort(end)}</div>}
-                                {sh?.notes && <div className="lbl" style={{ fontSize:9, opacity:.8, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:'100%' }}>{sh.notes.length > 6 ? sh.notes.slice(0,6)+'…' : sh.notes}</div>}
-                              </div>
-                            )}
-                          </td>
-                        );
-                      })}
-                      <td className="total" style={{ fontSize:11, lineHeight:1.6 }}>
-                        <strong className="mono">{Math.round(totalH)}h</strong>
-                        {kyukeiCnt > 0 && <div style={{ color:'#ef4444' }}>公休{kyukeiCnt}</div>}
-                        {yukyuCnt  > 0 && <div style={{ color:'#16a34a' }}>有給{yukyuCnt}</div>}
-                        {kyuCnt    > 0 && <div style={{ color:'#dc2626' }}>休{kyuCnt}</div>}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+        {!loadingShifts && view === 'month' && officeId !== 'ALL' && (
+          <ShiftMonthMatrix
+            staff={officeStaff}
+            master={shiftMaster}
+            shifts={shifts}
+            days={days}
+            onCellClick={(staffId, iso, staffOfficeId) => setEditing({ staffId, date: iso, officeId: staffOfficeId })}
+          />
+        )}
+
+        {!loadingShifts && view === 'month' && officeId === 'ALL' && (
+          offices.map(office => {
+            const staffForOffice = officeStaff.filter(s => s.office_id === office.id);
+            const masterForOffice = allShiftTypes.filter(t => t.office_id === office.id);
+            if (staffForOffice.length === 0) return null;
+            return (
+              <div key={office.id}>
+                <div style={{ padding: '6px 16px', background: 'var(--bg)', borderTop: '2px solid var(--primary)', display:'flex', alignItems:'center', gap:8 }}>
+                  <strong style={{ fontSize:13 }}>{office.name}</strong>
+                  <span className="muted" style={{ fontSize:11 }}>{staffForOffice.length}名</span>
+                </div>
+                <ShiftMonthMatrix
+                  staff={staffForOffice}
+                  master={masterForOffice}
+                  shifts={shifts}
+                  days={days}
+                  onCellClick={(staffId, iso, staffOfficeId) => setEditing({ staffId, date: iso, officeId: staffOfficeId })}
+                />
+              </div>
+            );
+          })
         )}
 
         {!loadingShifts && view === 'week' && (
@@ -289,7 +270,7 @@ function ShiftPage({ auth }) {
       {editing && (
         <ShiftEditModalAdmin
           sel={editing}
-          master={shiftMaster}
+          master={allShiftTypes.filter(t => t.office_id === (editing.officeId || officeId))}
           current={shifts[`${editing.staffId}|${editing.date}`]}
           staffName={officeStaff.find(s => s.id === editing.staffId)?.name}
           onClose={() => setEditing(null)}
@@ -306,8 +287,84 @@ function ShiftPage({ auth }) {
         />
       )}
 
-      {/* シフトマスタ管理 */}
-      {officeId && <ShiftMasterSection officeId={officeId} />}
+      {/* シフトマスタ管理（種別編集ボタンはツールバーに配置） */}
+      {officeId && officeId !== 'ALL' && masterOpen && (
+        <ShiftMasterSection officeId={officeId} onClose={() => setMasterOpen(false)} />
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// ShiftMonthMatrix - 月次シフト表（単一事業所）
+// ============================================================
+function ShiftMonthMatrix({ staff, master, shifts, days, onCellClick }) {
+  return (
+    <div className="shift-matrix-wrap">
+      <table className="shift-matrix">
+        <thead>
+          <tr>
+            <th className="sticky-l">スタッフ</th>
+            {days.map(d => (
+              <th key={d.n} className={`day-h ${d.dow === 0 ? 'sun' : d.dow === 6 ? 'sat' : ''}`}>
+                <div className="dn">{d.n}</div>
+                <div className="dw">{['日','月','火','水','木','金','土'][d.dow]}</div>
+              </th>
+            ))}
+            <th className="total">合計</th>
+          </tr>
+        </thead>
+        <tbody>
+          {staff.map(s => {
+            let totalH = 0, kyukeiCnt = 0, yukyuCnt = 0, kyuCnt = 0;
+            return (
+              <tr key={s.id}>
+                <td className="sticky-l">
+                  <div className="row-name">
+                    <span className="avatar sm">{s.name.slice(0, 1)}</span>
+                    <strong>{s.name}</strong>
+                  </div>
+                </td>
+                {days.map(d => {
+                  const sh  = shifts[`${s.id}|${d.iso}`];
+                  const sm  = sh ? master.find(x => x.id === sh.typeId) : null;
+                  const start = fmtTime(sh?.override?.start || sm?.start_time);
+                  const end   = fmtTime(sh?.override?.end   || sm?.end_time);
+                  if (start && end) {
+                    const [ih, im] = start.split(':').map(Number);
+                    const [oh, om] = end.split(':').map(Number);
+                    totalH += (oh * 60 + om - ih * 60 - im - (sm?.break_minutes || 60)) / 60;
+                  }
+                  if (sm?.label === '公休') kyukeiCnt++;
+                  if (sm?.label === '有給') yukyuCnt++;
+                  if (sm?.label === '休')   kyuCnt++;
+                  return (
+                    <td
+                      key={d.n}
+                      className={`shift-cell ${d.dow === 0 ? 'sun' : d.dow === 6 ? 'sat' : ''}`}
+                      onClick={() => onCellClick(s.id, d.iso, s.office_id)}
+                    >
+                      {sm && (
+                        <div className="cell-shift" style={{ background: sm.color }}>
+                          <div className="lbl">{sm.label}</div>
+                          {start && <div className="time mono">{fmtShort(start)}〜{fmtShort(end)}</div>}
+                          {sh?.notes && <div className="lbl" style={{ fontSize:9, opacity:.8, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:'100%' }}>{sh.notes.length > 6 ? sh.notes.slice(0,6)+'…' : sh.notes}</div>}
+                        </div>
+                      )}
+                    </td>
+                  );
+                })}
+                <td className="total" style={{ fontSize:11, lineHeight:1.6 }}>
+                  <strong className="mono">{Math.round(totalH)}h</strong>
+                  {kyukeiCnt > 0 && <div style={{ color:'#ef4444' }}>公休{kyukeiCnt}</div>}
+                  {yukyuCnt  > 0 && <div style={{ color:'#16a34a' }}>有給{yukyuCnt}</div>}
+                  {kyuCnt    > 0 && <div style={{ color:'#dc2626' }}>休{kyuCnt}</div>}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -542,9 +599,8 @@ function ShiftEditModalAdmin({ sel, master, current, onClose, onSave, onDelete, 
 // ============================================================
 // ShiftMasterSection - シフト種別マスタ管理
 // ============================================================
-function ShiftMasterSection({ officeId }) {
+function ShiftMasterSection({ officeId, onClose }) {
   const { shiftTypes, setShiftTypes, showToast } = useContextS(AppCtx);
-  const [open, setOpen] = useStateS(false);
   // ローカル編集用state（入力中はここだけ更新し、blur時にDBへ保存）
   const [localEdits, setLocalEdits] = useStateS({});
 
@@ -596,21 +652,13 @@ function ShiftMasterSection({ officeId }) {
     showToast('シフト種別を削除しました');
   }
 
-  if (!open) {
-    return (
-      <button className="btn-ghost" style={{ marginTop: 8 }} onClick={() => setOpen(true)}>
-        ⚙ シフト種別マスタを編集
-      </button>
-    );
-  }
-
   return (
     <div className="card">
       <div className="page-head" style={{ padding: '12px 16px' }}>
         <div><h3>シフト種別マスタ</h3><p className="muted small">この事業所のシフト種別を管理します</p></div>
         <div className="actions">
           <button className="btn-ghost" onClick={addType}>＋ 追加</button>
-          <button className="btn-ghost" onClick={() => setOpen(false)}>閉じる</button>
+          <button className="btn-ghost" onClick={onClose}>閉じる</button>
         </div>
       </div>
       <table className="sheet">

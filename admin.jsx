@@ -1399,7 +1399,7 @@ function AccountsPage() {
                   <td><span className="drag-handle">⠿</span></td>
                   <td className="rownum">{i+1}</td>
                   <td><strong>{s.name}</strong></td>
-                  <td className="mono" style={{ fontSize:12 }}>{s.email || <span className="muted">—</span>}</td>
+                  <td className="mono" style={{ fontSize:12, whiteSpace:'nowrap' }}>{s.email || <span className="muted">—</span>}</td>
                   <td><span className="pill role-full">{ROLE_LABELS[s.role] || s.role}</span></td>
                   <td>{office?.name || '—'}</td>
                   <td style={{ display:'flex', gap:4 }}>
