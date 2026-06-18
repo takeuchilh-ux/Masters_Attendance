@@ -235,6 +235,7 @@ function Login() {
 // ============================================================
 function AdminShell({ profile }) {
   const [route, setRoute] = useState('dashboard');
+  const [sideOpen, setSideOpen] = useState(true);
   const { dbStatus, unreadAlerts } = useContext(AppCtx);
 
   const navItems = [
@@ -250,7 +251,7 @@ function AdminShell({ profile }) {
   ];
 
   return (
-    <div className="shell">
+    <div className={`shell${sideOpen ? '' : ' sidebar-collapsed'}`}>
       <aside className="sidebar">
         <div className="brand">
           <img src="logo.png" alt="Masters Staff" style={{ width:36, height:36, objectFit:'contain', background:'#fff', borderRadius:4, padding:2 }} />
@@ -286,9 +287,14 @@ function AdminShell({ profile }) {
       </aside>
       <main className="main">
         <header className="topbar">
-          <div className="crumbs">
-            <span>MasuTa!</span><span className="sep">／</span>
-            <strong>{navItems.find(n => n.id === route)?.label}</strong>
+          <div style={{ display:'flex', alignItems:'center' }}>
+            <button className="hamburger" onClick={() => setSideOpen(o => !o)} title="メニュー">
+              <span /><span /><span />
+            </button>
+            <div className="crumbs">
+              <span>MasuTa!</span><span className="sep">／</span>
+              <strong>{navItems.find(n => n.id === route)?.label}</strong>
+            </div>
           </div>
           <div className="topbar-right"></div>
         </header>

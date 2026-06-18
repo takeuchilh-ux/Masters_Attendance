@@ -50,6 +50,7 @@ function OfficeShell({ profile }) {
   const [officeName, setOfficeName] = useStateO('');
   const [route,      setRoute]      = useStateO('dashboard');
   const [pendingCnt, setPendingCnt] = useStateO(0);
+  const [sideOpen,   setSideOpen]   = useStateO(true);
 
   useEffectO(() => {
     mdb('offices').select('name').eq('id', officeId).single()
@@ -77,7 +78,7 @@ function OfficeShell({ profile }) {
 
   return (
     <OfficeProvider officeId={officeId}>
-      <div className="shell">
+      <div className={`shell${sideOpen ? '' : ' sidebar-collapsed'}`}>
         <aside className="sidebar">
           <div className="brand">
             <img src="logo.png" alt="Masters Staff" style={{ width:36, height:36, objectFit:'contain', background:'#fff', borderRadius:4, padding:2 }} />
@@ -110,9 +111,14 @@ function OfficeShell({ profile }) {
         </aside>
         <main className="main">
           <header className="topbar">
-            <div className="crumbs">
-              <span>MasuTa!</span><span className="sep">／</span>
-              <strong>{nav.find(n => n.id === route)?.label}</strong>
+            <div style={{ display:'flex', alignItems:'center' }}>
+              <button className="hamburger" onClick={() => setSideOpen(o => !o)} title="メニュー">
+                <span /><span /><span />
+              </button>
+              <div className="crumbs">
+                <span>MasuTa!</span><span className="sep">／</span>
+                <strong>{nav.find(n => n.id === route)?.label}</strong>
+              </div>
             </div>
             <div className="topbar-right">
               <span className="muted small">{officeName}</span>
