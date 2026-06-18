@@ -158,7 +158,6 @@ function ShiftPage({ auth }) {
         </div>
         <div className="actions">
           <button className="btn-ghost" onClick={printPDF}>📄 PDF作成</button>
-          <button className="btn-primary" onClick={() => showToast('シフトを保存しました')}>シフトを保存</button>
         </div>
       </div>
 
