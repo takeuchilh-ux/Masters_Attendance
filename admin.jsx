@@ -1271,13 +1271,18 @@ function AccountsPage() {
     try {
       const newEmail = editForm.email.trim() || null;
       const oldEmail = editing.email || null;
-      // Auth側のメール変更：旧メールが存在し、かつ変更があった場合のみ
-      if (oldEmail && newEmail && newEmail !== oldEmail) {
-        await callEdge({ action: 'change_email', target_email: oldEmail, new_email: newEmail });
-      }
+      const emailChanged = oldEmail && newEmail && newEmail !== oldEmail;
+
+      // 1. まずDB更新（セッション有効中に実行）
       const payload = { name: editForm.name, office_id: editForm.office_id || null, role: editForm.role, email: newEmail };
       const { error } = await mdb('staff').update(payload).eq('id', editing.id);
       if (error) throw new Error(error.message || error.details || JSON.stringify(error));
+
+      // 2. Auth側のメール変更（DBが更新された後、セッション無効化されても問題なし）
+      if (emailChanged) {
+        await callEdge({ action: 'change_email', target_email: oldEmail, new_email: newEmail });
+      }
+
       setStaff(ss => ss.map(s => s.id === editing.id ? { ...s, ...payload } : s));
       showToast('アカウントを更新しました');
       setEditing(null);
