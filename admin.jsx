@@ -507,6 +507,91 @@ function TouchLogEditModal({ row, field, onClose, onSave }) {
 }
 
 // ============================================================
+// MonthlyDetailTable - 月次集計の日別詳細展開
+// ============================================================
+function MonthlyDetailTable({ sShifts, sTouches, sRequests, shiftTypesDB }) {
+  const DOW = ['日','月','火','水','木','金','土'];
+
+  // 日付ごとにまとめる
+  const days = sShifts.map(sh => {
+    const st      = shiftTypesDB.find(t => t.id === sh.shift_type_id);
+    const start   = (sh.override_start || st?.start_time || '').slice(0, 5);
+    const end     = (sh.override_end   || st?.end_time   || '').slice(0, 5);
+    const touch   = sTouches.find(t => t.touched_at?.slice(0, 10) === sh.date);
+    const touchTime = touch
+      ? new Date(touch.touched_at).toLocaleTimeString('ja-JP', { hour:'2-digit', minute:'2-digit', timeZone:'Asia/Tokyo' })
+      : null;
+    const reqs    = sRequests.filter(r => r.date === sh.date);
+    const d       = new Date(sh.date);
+    const dow     = d.getDay();
+
+    let workMin = 0;
+    if (start && end) {
+      const [sh_, sm_] = start.split(':').map(Number);
+      const [eh_, em_] = end.split(':').map(Number);
+      workMin = (eh_ * 60 + em_) - (sh_ * 60 + sm_) - (st?.break_minutes || 0);
+    }
+
+    return { date: sh.date, dow, label: st?.label || '—', color: st?.color, start, end, workMin, touchTime, reqs };
+  }).sort((a, b) => a.date.localeCompare(b.date));
+
+  return (
+    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+      <thead>
+        <tr style={{ background:'#e2e8f0', color:'#475569' }}>
+          <th style={{ padding:'4px 12px', textAlign:'left', fontWeight:600, width:90 }}>日付</th>
+          <th style={{ padding:'4px 8px', textAlign:'center', fontWeight:600, width:80 }}>シフト</th>
+          <th style={{ padding:'4px 8px', textAlign:'center', fontWeight:600, width:130 }}>予定時間</th>
+          <th style={{ padding:'4px 8px', textAlign:'center', fontWeight:600, width:70 }}>打刻</th>
+          <th style={{ padding:'4px 8px', textAlign:'left', fontWeight:600 }}>申請</th>
+          <th style={{ padding:'4px 8px', textAlign:'right', fontWeight:600, width:60 }}>実働</th>
+        </tr>
+      </thead>
+      <tbody>
+        {days.map(d => {
+          const isSun = d.dow === 0, isSat = d.dow === 6;
+          return (
+            <tr key={d.date} style={{ borderBottom:'1px solid #e2e8f0', background: isSun ? '#fff5f5' : isSat ? '#f0f8ff' : '#fff' }}>
+              <td style={{ padding:'4px 12px', fontFamily:'monospace' }}>
+                <span style={{ color: isSun ? '#ef4444' : isSat ? '#3b82f6' : '#334155' }}>
+                  {d.date.slice(5).replace('-','/')} ({DOW[d.dow]})
+                </span>
+              </td>
+              <td style={{ padding:'4px 8px', textAlign:'center' }}>
+                <span style={{ display:'inline-block', padding:'1px 8px', borderRadius:4, background: d.color || '#e2e8f0', fontSize:11, fontWeight:600 }}>
+                  {d.label}
+                </span>
+              </td>
+              <td style={{ padding:'4px 8px', textAlign:'center', fontFamily:'monospace', color:'#475569' }}>
+                {d.start && d.end ? `${d.start} 〜 ${d.end}` : '—'}
+              </td>
+              <td style={{ padding:'4px 8px', textAlign:'center', fontFamily:'monospace' }}>
+                {d.touchTime
+                  ? <span style={{ color:'#16a34a', fontWeight:600 }}>{d.touchTime}</span>
+                  : <span style={{ color:'#94a3b8' }}>未打刻</span>}
+              </td>
+              <td style={{ padding:'4px 8px', color:'#64748b' }}>
+                {d.reqs.length === 0 ? <span style={{ color:'#cbd5e1' }}>—</span>
+                  : d.reqs.map((req, i) => (
+                    <span key={i} style={{ marginRight:4, display:'inline-block', padding:'1px 6px', borderRadius:4, fontSize:11, background: req.type === 'late' || req.type === 'early_leave' ? '#fef3c7' : '#dcfce7', color: req.type === 'late' || req.type === 'early_leave' ? '#92400e' : '#166534' }}>
+                      {REQUEST_TYPE_LABELS[req.type] || req.type}
+                      {req.adjust_minutes > 0 && ` ${req.adjust_minutes}分`}
+                    </span>
+                  ))
+                }
+              </td>
+              <td style={{ padding:'4px 8px', textAlign:'right', fontFamily:'monospace', fontWeight:600, color:'#334155' }}>
+                {d.workMin > 0 ? `${(d.workMin/60).toFixed(1)}h` : '—'}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
+// ============================================================
 // MonthlyPage - 月次集計（給与計算用）
 // ============================================================
 function MonthlyPage() {
@@ -518,6 +603,15 @@ function MonthlyPage() {
   const [shiftTypesDB, setShiftTypesDB] = useStateA([]);
   const [requests,     setRequests]     = useStateA([]);
   const [touches,      setTouches]      = useStateA([]);
+  const [expanded,     setExpanded]     = useStateA(new Set());
+
+  function toggleExpand(id) {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
 
   useEffectA(() => {
     async function load() {
@@ -581,7 +675,7 @@ function MonthlyPage() {
       const effectiveH   = (effectiveMin / 60).toFixed(1);
       const office       = offices.find(o => o.id === s.office_id);
 
-      return { s, office, shiftDays, presentDays, absentDays, paidLeave, lateMin, earlyMin, effectiveH };
+      return { s, office, shiftDays, presentDays, absentDays, paidLeave, lateMin, earlyMin, effectiveH, sShifts, sTouches, sRequests };
     }).filter(r => r.shiftDays > 0);
   }, [allStaff, shifts, shiftTypesDB, requests, touches, officeFilter, offices]);
 
@@ -629,27 +723,52 @@ function MonthlyPage() {
         ) : (
           <table className="sheet">
             <thead><tr>
+              <th style={{width:28}}></th>
               <th className="rownum"></th>
               <th>氏名</th><th>事業所</th>
               <th>シフト日数</th><th>出勤確認</th><th>欠勤</th>
               <th>有給</th><th>遅刻(分)</th><th>早退(分)</th><th>実働(h)</th>
             </tr></thead>
             <tbody>
-              {summaries.length === 0 && <tr><td colSpan={10} className="empty">データがありません</td></tr>}
-              {summaries.map((r, i) => (
-                <tr key={r.s.id}>
-                  <td className="rownum">{i + 1}</td>
-                  <td><strong>{r.s.name}</strong></td>
-                  <td>{r.office?.name || '—'}</td>
-                  <td className="mono">{r.shiftDays}日</td>
-                  <td className="mono">{r.presentDays}日</td>
-                  <td className="mono">{r.absentDays > 0 ? <span className="pill warn">{r.absentDays}日</span> : <span className="muted">0</span>}</td>
-                  <td className="mono">{r.paidLeave > 0 ? `${r.paidLeave}日` : <span className="muted">0</span>}</td>
-                  <td className="mono">{r.lateMin > 0  ? <span className="pill warn">{r.lateMin}分</span>  : <span className="muted">0</span>}</td>
-                  <td className="mono">{r.earlyMin > 0 ? <span className="pill caution">{r.earlyMin}分</span> : <span className="muted">0</span>}</td>
-                  <td className="mono"><strong>{r.effectiveH}h</strong></td>
-                </tr>
-              ))}
+              {summaries.length === 0 && <tr><td colSpan={11} className="empty">データがありません</td></tr>}
+              {summaries.map((r, i) => {
+                const isOpen = expanded.has(r.s.id);
+                return (
+                  <React.Fragment key={r.s.id}>
+                    <tr>
+                      <td style={{ textAlign:'center', padding:'0 4px' }}>
+                        <button
+                          onClick={() => toggleExpand(r.s.id)}
+                          style={{ background:'none', border:'1px solid var(--line-strong)', borderRadius:4, width:20, height:20, cursor:'pointer', fontSize:9, lineHeight:'18px', color:'var(--muted)', padding:0, display:'inline-flex', alignItems:'center', justifyContent:'center' }}
+                          title="詳細を表示"
+                        >{isOpen ? '▼' : '▶'}</button>
+                      </td>
+                      <td className="rownum">{i + 1}</td>
+                      <td><strong>{r.s.name}</strong></td>
+                      <td>{r.office?.name || '—'}</td>
+                      <td className="mono">{r.shiftDays}日</td>
+                      <td className="mono">{r.presentDays}日</td>
+                      <td className="mono">{r.absentDays > 0 ? <span className="pill warn">{r.absentDays}日</span> : <span className="muted">0</span>}</td>
+                      <td className="mono">{r.paidLeave > 0 ? `${r.paidLeave}日` : <span className="muted">0</span>}</td>
+                      <td className="mono">{r.lateMin > 0  ? <span className="pill warn">{r.lateMin}分</span>  : <span className="muted">0</span>}</td>
+                      <td className="mono">{r.earlyMin > 0 ? <span className="pill caution">{r.earlyMin}分</span> : <span className="muted">0</span>}</td>
+                      <td className="mono"><strong>{r.effectiveH}h</strong></td>
+                    </tr>
+                    {isOpen && (
+                      <tr>
+                        <td colSpan={11} style={{ padding:0, background:'#f8fafc' }}>
+                          <MonthlyDetailTable
+                            sShifts={r.sShifts}
+                            sTouches={r.sTouches}
+                            sRequests={r.sRequests}
+                            shiftTypesDB={shiftTypesDB}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         )}
