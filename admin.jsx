@@ -1221,7 +1221,7 @@ function OfficeQRModal({ office, onClose }) {
 // AccountsPage - アカウント管理（本部のみ）
 // ============================================================
 function AccountsPage() {
-  const { offices, staff, setStaff, showToast } = useContextA(AppCtx);
+  const { offices, staff, setStaff, showToast, reload } = useContextA(AppCtx);
   const [creating,  setCreating]  = useStateA(false);
   const [editing,   setEditing]   = useStateA(null); // 編集対象staff
   const [pwTarget,  setPwTarget]  = useStateA(null); // PW変更対象staff
@@ -1256,8 +1256,7 @@ function AccountsPage() {
     setBusy(true);
     try {
       await callEdge({ action:'create_user', ...form });
-      const { data } = await mdb('staff').select('*').eq('email', form.email).single();
-      if (data) setStaff(ss => [...ss.filter(s => s.email !== form.email), data]);
+      await reload();
       showToast('アカウントを作成しました');
       setCreating(false);
       setForm({ name:'', email:'', password:'', office_id:'', role:'office_manager' });
