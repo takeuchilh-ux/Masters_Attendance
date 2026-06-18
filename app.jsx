@@ -240,6 +240,7 @@ function AdminShell({ profile }) {
 
   const navItems = [
     { id: 'dashboard', label: 'ダッシュボード', icon: '🏠' },
+    { id: 'touch',     label: '打刻',           icon: '⏱' },
     { id: 'shift',     label: 'シフト',         icon: '📅' },
     { id: 'requests',  label: '申請一覧',        icon: '📝' },
     { id: 'monthly',   label: '月次集計',        icon: '📊' },
@@ -300,6 +301,7 @@ function AdminShell({ profile }) {
         </header>
         <div className="page">
           {route === 'dashboard' && <DashboardPage />}
+          {route === 'touch'     && <ManualTouchPage />}
           {route === 'shift'     && <ShiftPage />}
           {route === 'requests'  && <RequestsViewPage />}
           {route === 'monthly'   && <MonthlyPage />}

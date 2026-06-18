@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>MasuTa! 打刻</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Noto Sans JP', 'Inter', sans-serif; background: #f1f5f9; min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px; }
+  .card { background: #fff; border-radius: 20px; box-shadow: 0 4px 24px rgba(0,0,0,.10); padding: 32px 24px; width: 100%; max-width: 380px; }
+  h1 { font-size: 22px; font-weight: 700; color: #0f172a; margin-bottom: 4px; }
+  .muted { color: #64748b; font-size: 13px; }
+  .logo { display: block; width: 56px; height: 56px; object-fit: contain; margin: 0 auto 12px; }
+  .field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+  .field label { font-size: 13px; font-weight: 600; color: #374151; }
+  .field input { border: 1px solid #d1d5db; border-radius: 8px; padding: 10px 12px; font-size: 15px; outline: none; font-family: inherit; }
+  .field input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.15); }
+  .btn { width: 100%; padding: 14px; border-radius: 12px; font-size: 16px; font-weight: 700; border: none; cursor: pointer; transition: opacity .15s; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-blue  { background: #2563eb; color: #fff; }
+  .btn-green { background: #16a34a; color: #fff; font-size: 20px; padding: 22px; }
+  .btn-red   { background: #dc2626; color: #fff; font-size: 20px; padding: 22px; }
+  .btn-ghost { background: transparent; border: 1px solid #d1d5db; color: #64748b; font-size: 14px; padding: 10px; }
+  .err { background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-bottom: 12px; }
+  .name-box { text-align: center; padding: 20px 0 8px; }
+  .name-box .avatar { width: 64px; height: 64px; border-radius: 50%; background: #dbeafe; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 700; color: #1d4ed8; margin: 0 auto 10px; }
+  .name-box strong { font-size: 20px; display: block; margin-bottom: 2px; }
+  .clock { font-size: 36px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 2px; text-align: center; color: #0f172a; margin: 18px 0 4px; font-family: 'Inter', monospace; }
+  .date-str { text-align: center; color: #64748b; font-size: 14px; margin-bottom: 20px; }
+  .status-row { display: flex; gap: 10px; margin-bottom: 20px; }
+  .status-chip { flex: 1; text-align: center; padding: 8px 4px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+  .chip-in  { background: #dcfce7; color: #16a34a; }
+  .chip-out { background: #fee2e2; color: #dc2626; }
+  .chip-none { background: #f1f5f9; color: #94a3b8; }
+  .btn-row { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+  .toast { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); background: #0f172a; color: #fff; padding: 12px 24px; border-radius: 999px; font-size: 14px; font-weight: 600; animation: fadeup .3s ease; white-space: nowrap; }
+  @keyframes fadeup { from { opacity:0; transform: translateX(-50%) translateY(12px); } to { opacity:1; transform: translateX(-50%) translateY(0); } }
+  .foot { margin-top: 24px; font-size: 11px; color: #94a3b8; text-align: center; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+const SUPABASE_URL  = 'https://dzwsdmcffrubjimnrfyf.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR6d3NkbWNmZnJ1YmppbW5yZnlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3MjkxODAsImV4cCI6MjA5NDMwNTE4MH0.VXEGijG64gi9TMWDhrvZE6qcs0ZnArbZRrquGbpN-Kg';
+const supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+const mdb  = (t) => supa.schema('masuta').from(t);
+
+const DOW = ['日','月','火','水','木','金','土'];
+
+function localDateStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function fmtDateJA(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${DOW[d.getDay()]}）`;
+}
+
+// ライブ時計
+function useClock() {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return now;
+}
+
+function App() {
+  const [session, setSession] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supa.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) loadProfile(session.user.email).then(setProfile);
+      setLoading(false);
+    });
+    const { data: { subscription } } = supa.auth.onAuthStateChange(async (_, session) => {
+      setSession(session);
+      if (session) { const p = await loadProfile(session.user.email); setProfile(p); }
+      else setProfile(null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  async function loadProfile(email) {
+    const { data } = await mdb('staff').select('*, offices(name)').eq('email', email).eq('is_active', true).maybeSingle();
+    return data;
+  }
+
+  if (loading) return <div style={{ textAlign:'center', padding:40, color:'#64748b' }}>読み込み中...</div>;
+  if (!session || !profile) return <LoginScreen />;
+  return <ClockScreen profile={profile} />;
+}
+
+function LoginScreen() {
+  const [email, setEmail] = useState('');
+  const [pw,    setPw]    = useState('');
+  const [err,   setErr]   = useState('');
+  const [busy,  setBusy]  = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    setErr(''); setBusy(true);
+    const { error } = await supa.auth.signInWithPassword({ email, password: pw });
+    setBusy(false);
+    if (error) setErr('メールアドレスまたはパスワードが違います');
+  }
+
+  return (
+    <div className="card">
+      <img src="logo.png" alt="" className="logo" />
+      <h1 style={{ textAlign:'center' }}>MasuTa! 打刻</h1>
+      <p className="muted" style={{ textAlign:'center', marginBottom:24 }}>ログインして打刻してください</p>
+      <form onSubmit={submit}>
+        <div className="field">
+          <label>メールアドレス</label>
+          <input type="email" value={email} onChange={e => { setEmail(e.target.value); setErr(''); }} autoFocus placeholder="email@example.com" />
+        </div>
+        <div className="field">
+          <label>パスワード</label>
+          <input type="password" value={pw} onChange={e => { setPw(e.target.value); setErr(''); }} placeholder="••••••••" />
+        </div>
+        {err && <div className="err">{err}</div>}
+        <button className="btn btn-blue" type="submit" disabled={busy}>{busy ? '認証中...' : 'ログイン'}</button>
+      </form>
+    </div>
+  );
+}
+
+function ClockScreen({ profile }) {
+  const now   = useClock();
+  const today = localDateStr();
+  const [inLog,  setInLog]  = useState(null);  // touch_logs row for today IN
+  const [outLog, setOutLog] = useState(null);  // touch_logs row for today OUT
+  const [busy,   setBusy]   = useState(false);
+  const [toast,  setToast]  = useState(null);
+
+  useEffect(() => { loadToday(); }, []);
+
+  async function loadToday() {
+    const { data } = await mdb('touch_logs')
+      .select('*')
+      .eq('staff_id', profile.id)
+      .gte('touched_at', `${today}T00:00:00`)
+      .lte('touched_at', `${today}T23:59:59`)
+      .order('touched_at');
+    const rows = data || [];
+    setInLog( rows.find(r => r.touch_type === 'in')  || null);
+    setOutLog(rows.find(r => r.touch_type === 'out') || null);
+  }
+
+  function showToast(msg) {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2500);
+  }
+
+  async function punch(type) {
+    setBusy(true);
+    const { error } = await mdb('touch_logs').insert({
+      staff_id:   profile.id,
+      office_id:  profile.office_id,
+      touch_type: type,
+      touched_at: new Date().toISOString(),
+      source:     'web',
+    });
+    if (error) { showToast('エラーが発生しました'); setBusy(false); return; }
+    await loadToday();
+    setBusy(false);
+    showToast(type === 'in' ? '✅ 出勤打刻しました' : '✅ 退勤打刻しました');
+  }
+
+  const timeStr = now.toLocaleTimeString('ja-JP', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+
+  return (
+    <div className="card">
+      <div className="name-box">
+        <div className="avatar">{profile.name.slice(0,1)}</div>
+        <strong>{profile.name}</strong>
+        <span className="muted">{profile.offices?.name || '—'}</span>
+      </div>
+
+      <div className="clock">{timeStr}</div>
+      <div className="date-str">{fmtDateJA(today)}</div>
+
+      <div className="status-row">
+        <div className={`status-chip ${inLog ? 'chip-in' : 'chip-none'}`}>
+          出勤<br />
+          <strong>{inLog ? new Date(inLog.touched_at).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}) : '—'}</strong>
+        </div>
+        <div className={`status-chip ${outLog ? 'chip-out' : 'chip-none'}`}>
+          退勤<br />
+          <strong>{outLog ? new Date(outLog.touched_at).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}) : '—'}</strong>
+        </div>
+      </div>
+
+      <div className="btn-row">
+        <button
+          className="btn btn-green"
+          onClick={() => punch('in')}
+          disabled={busy || !!inLog}
+        >🟢 出勤</button>
+        <button
+          className="btn btn-red"
+          onClick={() => punch('out')}
+          disabled={busy || !inLog || !!outLog}
+        >🔴 退勤</button>
+      </div>
+
+      <button className="btn btn-ghost" onClick={() => supa.auth.signOut()}>ログアウト</button>
+
+      {toast && <div className="toast">{toast}</div>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+<div class="foot">© 2026 Masters Staff Inc.</div>
+</body>
+</html>

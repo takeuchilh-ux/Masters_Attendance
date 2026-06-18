@@ -1659,4 +1659,140 @@ function AccountsPage() {
   );
 }
 
-Object.assign(window, { DashboardPage, RequestsViewPage, TouchLogPage, MonthlyPage, StaffAdminPage, AlertsPage, OfficesPage, AccountsPage });
+// ============================================================
+// ManualTouchPage - 管理者手動打刻
+// ============================================================
+function ManualTouchPage() {
+  const { offices, staff: allStaff, showToast } = useContextA(AppCtx);
+  const [officeFilter, setOfficeFilter] = useStateA(offices[0]?.id || '');
+  const [todayLogs,    setTodayLogs]    = useStateA([]); // 今日の全touch_logs
+  const [busy,         setBusy]         = useStateA(null); // staffId|type
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  useEffectA(() => {
+    if (offices.length > 0 && !officeFilter) setOfficeFilter(offices[0].id);
+  }, [offices]);
+
+  useEffectA(() => { loadToday(); }, []);
+
+  async function loadToday() {
+    const { data } = await mdb('touch_logs')
+      .select('*')
+      .gte('touched_at', `${today}T00:00:00`)
+      .lte('touched_at', `${today}T23:59:59`);
+    setTodayLogs(data || []);
+  }
+
+  const staffList = useMemoA(() =>
+    allStaff.filter(s => s.is_worker !== false && (officeFilter === 'all' || s.office_id === officeFilter)),
+    [allStaff, officeFilter]
+  );
+
+  function getLog(staffId, type) {
+    return todayLogs.find(l => l.staff_id === staffId && l.touch_type === type) || null;
+  }
+
+  async function punch(staffId, officeId, type) {
+    const key = `${staffId}|${type}`;
+    setBusy(key);
+    const { error } = await mdb('touch_logs').insert({
+      staff_id:   staffId,
+      office_id:  officeId,
+      touch_type: type,
+      touched_at: new Date().toISOString(),
+      source:     'manual',
+    });
+    if (error) { showToast('エラーが発生しました', 'error'); setBusy(null); return; }
+    await loadToday();
+    setBusy(null);
+    showToast(`${type === 'in' ? '出勤' : '退勤'}打刻しました`);
+  }
+
+  async function deleteLog(id) {
+    await mdb('touch_logs').delete().eq('id', id);
+    await loadToday();
+    showToast('打刻を削除しました');
+  }
+
+  const fmtTime = ts => ts ? new Date(ts).toLocaleTimeString('ja-JP', { hour:'2-digit', minute:'2-digit', timeZone:'Asia/Tokyo' }) : null;
+
+  return (
+    <div className="stack">
+      <div className="page-head">
+        <div><h1>打刻</h1><p className="muted">今日（{today}）の出退勤を手動で記録・確認できます</p></div>
+      </div>
+
+      <div className="card">
+        <div className="filter-bar">
+          <label className="field inline">
+            <span>事業所</span>
+            <select value={officeFilter} onChange={e => setOfficeFilter(e.target.value)}>
+              <option value="all">すべて</option>
+              {offices.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+            </select>
+          </label>
+          <button className="btn-ghost" onClick={loadToday}>🔄 更新</button>
+        </div>
+
+        <table className="sheet">
+          <thead><tr>
+            <th className="rownum"></th>
+            <th>氏名</th>
+            <th>事業所</th>
+            <th style={{ width: 160 }}>出勤</th>
+            <th style={{ width: 160 }}>退勤</th>
+          </tr></thead>
+          <tbody>
+            {staffList.length === 0 && <tr><td colSpan={5} className="empty">スタッフがいません</td></tr>}
+            {staffList.map((s, i) => {
+              const inLog  = getLog(s.id, 'in');
+              const outLog = getLog(s.id, 'out');
+              const office = offices.find(o => o.id === s.office_id);
+              return (
+                <tr key={s.id}>
+                  <td className="rownum">{i + 1}</td>
+                  <td><strong>{s.name}</strong></td>
+                  <td className="muted" style={{ fontSize: 12 }}>{office?.name || '—'}</td>
+                  <td>
+                    {inLog ? (
+                      <span style={{ display:'flex', alignItems:'center', gap:6 }}>
+                        <span style={{ background:'#dcfce7', color:'#16a34a', borderRadius:6, padding:'2px 10px', fontWeight:700, fontSize:14, fontFamily:'monospace' }}>{fmtTime(inLog.touched_at)}</span>
+                        <button className="btn-mini danger" onClick={() => deleteLog(inLog.id)} title="削除">✕</button>
+                      </span>
+                    ) : (
+                      <button
+                        className="btn-mini"
+                        style={{ background:'#16a34a', color:'#fff', border:'none' }}
+                        disabled={busy === `${s.id}|in`}
+                        onClick={() => punch(s.id, s.office_id, 'in')}
+                      >🟢 出勤打刻</button>
+                    )}
+                  </td>
+                  <td>
+                    {outLog ? (
+                      <span style={{ display:'flex', alignItems:'center', gap:6 }}>
+                        <span style={{ background:'#fee2e2', color:'#dc2626', borderRadius:6, padding:'2px 10px', fontWeight:700, fontSize:14, fontFamily:'monospace' }}>{fmtTime(outLog.touched_at)}</span>
+                        <button className="btn-mini danger" onClick={() => deleteLog(outLog.id)} title="削除">✕</button>
+                      </span>
+                    ) : (
+                      <button
+                        className="btn-mini"
+                        style={{ background:'#dc2626', color:'#fff', border:'none', opacity: inLog ? 1 : .4 }}
+                        disabled={busy === `${s.id}|out` || !inLog}
+                        onClick={() => punch(s.id, s.office_id, 'out')}
+                      >🔴 退勤打刻</button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div className="sheet-foot">{staffList.length}名</div>
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { DashboardPage, RequestsViewPage, TouchLogPage, MonthlyPage, StaffAdminPage, AlertsPage, OfficesPage, AccountsPage, ManualTouchPage });
