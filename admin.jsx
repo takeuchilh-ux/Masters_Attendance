@@ -1289,9 +1289,13 @@ function AccountsPage() {
     if (!confirm(`「${s.name}」のアカウントを削除しますか？\nログインできなくなります。`)) return;
     setBusy(true);
     try {
-      await callEdge({ action: 'delete_user', target_email: s.email });
-      await mdb('staff').update({ role: 'general', email: null }).eq('id', s.id);
-      setStaff(ss => ss.map(x => x.id === s.id ? { ...x, role: 'general', email: null } : x));
+      if (s.email) {
+        // auth.usersからも削除
+        await callEdge({ action: 'delete_user', target_email: s.email });
+      }
+      // staffのメール・権限をリセット
+      await mdb('staff').update({ role: 'staff', email: null }).eq('id', s.id);
+      setStaff(ss => ss.map(x => x.id === s.id ? { ...x, role: 'staff', email: null } : x));
       showToast('アカウントを削除しました');
     } catch(e) { showToast(e.message, 'error'); }
     setBusy(false);
