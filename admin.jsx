@@ -1759,7 +1759,6 @@ function ManualTouchPage() {
                   <td>
                     {outLog ? (
                       <span style={{ background:'#fee2e2', color:'#dc2626', borderRadius:6, padding:'2px 10px', fontWeight:700, fontSize:14, fontFamily:'monospace', display:'inline-block' }}>{fmtTime(outLog.touched_at)}</span>
-                      </span>
                     ) : (
                       <button
                         className="btn-mini"
