@@ -217,39 +217,55 @@ function OfficeDashboard({ officeId }) {
 function OfficeShiftPage({ officeId }) {
   const today = new Date();
   const { staff, shiftTypes } = useContextO(OfficeCtx);
-  const [year,    setYear]    = useStateO(today.getFullYear());
-  const [month,   setMonth]   = useStateO(today.getMonth() + 1);
-  const [shifts,  setShifts]  = useStateO({});
-  const [editing, setEditing] = useStateO(null);
-  const [loading, setLoading] = useStateO(false);
+  const [year,       setYear]      = useStateO(today.getFullYear());
+  const [month,      setMonth]     = useStateO(today.getMonth() + 1);
+  const [shifts,     setShifts]    = useStateO({});
+  const [duties,     setDuties]    = useStateO({});
+  const [editing,    setEditing]   = useStateO(null);
+  const [loading,    setLoading]   = useStateO(false);
 
-  useEffectO(() => {
-    setLoading(true);
-    const ms  = `${year}-${String(month).padStart(2,'0')}`;
-    const end = localISO(new Date(year, month, 0));
-    mdb('shifts').select('*').eq('office_id', officeId)
-      .gte('date', `${ms}-01`).lte('date', end)
-      .then(({ data }) => {
-        const map = {};
-        (data || []).forEach(s => {
-          map[`${s.staff_id}|${s.date}`] = {
-            typeId: s.shift_type_id, dbId: s.id,
-            override: (s.override_start || s.override_end)
-              ? { start: fmtTime(s.override_start), end: fmtTime(s.override_end) } : null,
-            notes: s.notes || '',
-          };
-        });
-        setShifts(map); setLoading(false);
-      });
-  }, [officeId, year, month]);
+  const periodStart = useMemoO(() => `${year}-${String(month).padStart(2,'0')}-11`, [year, month]);
+  const periodEnd   = useMemoO(() => {
+    const nm = month === 12 ? 1 : month + 1;
+    const ny = month === 12 ? year + 1 : year;
+    return `${ny}-${String(nm).padStart(2,'0')}-10`;
+  }, [year, month]);
 
   const days = useMemoO(() => {
-    const dim = new Date(year, month, 0).getDate();
-    return Array.from({ length: dim }, (_, i) => {
-      const d = new Date(year, month - 1, i + 1);
-      return { n: i + 1, dow: d.getDay(), iso: localISO(d) };
+    const result = [];
+    const start = new Date(periodStart + 'T00:00:00');
+    const end   = new Date(periodEnd   + 'T00:00:00');
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      result.push({ n: d.getDate(), dow: d.getDay(), iso: localISO(new Date(d)) });
+    }
+    return result;
+  }, [periodStart, periodEnd]);
+
+  useEffectO(() => {
+    if (!officeId) return;
+    setLoading(true);
+    Promise.all([
+      mdb('shifts').select('*').eq('office_id', officeId).gte('date', periodStart).lte('date', periodEnd),
+      mdb('duty_assignments').select('*').eq('office_id', officeId).gte('date', periodStart).lte('date', periodEnd),
+    ]).then(([shRes, dutyRes]) => {
+      const smap = {};
+      (shRes.data || []).forEach(s => {
+        smap[`${s.staff_id}|${s.date}`] = {
+          typeId: s.shift_type_id, dbId: s.id,
+          override: (s.override_start || s.override_end)
+            ? { start: fmtTime(s.override_start), end: fmtTime(s.override_end) } : null,
+          notes: s.notes || '',
+        };
+      });
+      const dmap = {};
+      (dutyRes.data || []).forEach(d => {
+        dmap[`${d.office_id}|${d.date}|${d.duty_type}`] = { staffId: d.staff_id, dbId: d.id };
+      });
+      setShifts(smap);
+      setDuties(dmap);
+      setLoading(false);
     });
-  }, [year, month]);
+  }, [officeId, periodStart, periodEnd]);
 
   async function saveShift(staffId, iso, typeId, override, notes) {
     const key = `${staffId}|${iso}`;
@@ -271,95 +287,37 @@ function OfficeShiftPage({ officeId }) {
     }
   }
 
+  function prevMonth() { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); }
+  function nextMonth() { if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); }
+
   return (
     <div className="stack">
       <div className="page-head">
-        <div><h1>シフト</h1><p className="muted">月単位でシフトを作成・編集できます</p></div>
+        <div><h1>シフト</h1><p className="muted">{periodStart.slice(5).replace('-','/')}〜{periodEnd.slice(5).replace('-','/')}</p></div>
       </div>
-      <div className="card">
-        <div className="shift-toolbar">
+      <div className="card" style={{ padding:0 }}>
+        <div className="shift-toolbar" style={{ padding:'8px 12px' }}>
           <div className="month-nav">
-            <button className="btn-icon" onClick={() => { if(month===1){setMonth(12);setYear(y=>y-1);}else setMonth(m=>m-1); }}>◀</button>
+            <button className="btn-icon" onClick={prevMonth}>◀</button>
             <strong>{year}年 {month}月</strong>
-            <button className="btn-icon" onClick={() => { if(month===12){setMonth(1);setYear(y=>y+1);}else setMonth(m=>m+1); }}>▶</button>
-          </div>
-          <div className="legend">
-            {shiftTypes.map(t => (
-              <span key={t.id} className="leg">
-                <span className="sw" style={{ background: t.color }}></span>
-                {t.label} {t.start_time && `${fmtTime(t.start_time)}〜${fmtTime(t.end_time)}`}
-              </span>
-            ))}
+            <button className="btn-icon" onClick={nextMonth}>▶</button>
           </div>
         </div>
         {loading ? (
           <div style={{ padding:24, textAlign:'center' }} className="muted">読み込み中...</div>
         ) : (
-          <div className="shift-matrix-wrap">
-            <table className="shift-matrix">
-              <thead>
-                <tr>
-                  <th className="sticky-l">スタッフ</th>
-                  {days.map(d => (
-                    <th key={d.n} className={`day-h ${d.dow===0?'sun':d.dow===6?'sat':''}`}>
-                      <div className="dn">{d.n}</div>
-                      <div className="dw">{['日','月','火','水','木','金','土'][d.dow]}</div>
-                    </th>
-                  ))}
-                  <th className="total">合計</th>
-                </tr>
-              </thead>
-              <tbody>
-                {staff.map(s => {
-                  let totalH = 0, kyukeiCnt = 0, yukyuCnt = 0, kyuCnt = 0;
-                  return (
-                    <tr key={s.id}>
-                      <td className="sticky-l">
-                        <div className="row-name">
-                          <span className="avatar sm">{s.name.slice(0,1)}</span>
-                          <strong>{s.name}</strong>
-                        </div>
-                      </td>
-                      {days.map(d => {
-                        const sh = shifts[`${s.id}|${d.iso}`];
-                        const sm = sh ? shiftTypes.find(x => x.id === sh.typeId) : null;
-                        const st = fmtTime(sh?.override?.start || sm?.start_time);
-                        const en = fmtTime(sh?.override?.end   || sm?.end_time);
-                        if (st && en) {
-                          const [ih,im]=st.split(':').map(Number);
-                          const [oh,om]=en.split(':').map(Number);
-                          totalH += ((oh*60+om)-(ih*60+im)-(sm?.break_minutes||60))/60;
-                        }
-                        if (sm?.label === '公休') kyukeiCnt++;
-                        if (sm?.label === '有給') yukyuCnt++;
-                        if (sm?.label === '休')   kyuCnt++;
-                        return (
-                          <td key={d.n}
-                            className={`shift-cell ${d.dow===0?'sun':d.dow===6?'sat':''}`}
-                            onClick={() => setEditing({ staffId: s.id, date: d.iso })}>
-                            {sm && (
-                              <div className="cell-shift" style={{ background: sm.color }}>
-                                <div className="lbl">{sm.label}</div>
-                                {st && <div className="time mono">{fmtShort(st)}〜{fmtShort(en)}</div>}
-                                {sh?.notes && <div className="lbl" style={{ fontSize:9, opacity:.8, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:'100%' }}>{sh.notes.length > 6 ? sh.notes.slice(0,6)+'…' : sh.notes}</div>}
-                              </div>
-                            )}
-                          </td>
-                        );
-                      })}
-                      <td className="total" style={{ fontSize:11, lineHeight:1.6 }}>
-                        <strong className="mono">{Math.max(0,Math.round(totalH))}h</strong>
-                        {kyukeiCnt > 0 && <div style={{ color:'#ef4444' }}>公休{kyukeiCnt}</div>}
-                        {yukyuCnt  > 0 && <div style={{ color:'#16a34a' }}>有給{yukyuCnt}</div>}
-                        {kyuCnt    > 0 && <div style={{ color:'#dc2626' }}>休{kyuCnt}</div>}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {staff.length === 0 && <tr><td colSpan={days.length+2} className="empty">スタッフが登録されていません</td></tr>}
-              </tbody>
-            </table>
-          </div>
+          <ShiftMonthMatrix
+            staff={staff}
+            master={shiftTypes}
+            shifts={shifts}
+            days={days}
+            duties={duties}
+            showDuty={true}
+            dutyOfficeId={officeId}
+            allStaff={staff}
+            onCellClick={(staffId, iso) => setEditing({ staffId, date: iso })}
+            onDutyClick={() => {}}
+          />
         )}
       </div>
       {editing && (

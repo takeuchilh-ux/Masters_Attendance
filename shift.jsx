@@ -380,6 +380,24 @@ function ShiftMonthMatrix({ staff, master, shifts, days, duties, showDuty, dutyO
   const tochiStaff  = hasCategories ? sortByPos(staff.filter(s => s.duty_category === '当直' || s.duty_category === '両方')) : [];
   const otherStaff  = hasCategories ? sortByPos(staff.filter(s => !s.duty_category)) : sortByPos(staff);
 
+  const renderGroupRows = (arr) => {
+    const rows = [];
+    let lastPos = undefined;
+    arr.forEach(s => {
+      const pos = s.position || '';
+      if (lastPos !== undefined && pos !== lastPos) {
+        rows.push(
+          <tr key={`sep-${s.id}`} style={{ height:2 }}>
+            <td colSpan={days.length + 2} style={{ padding:0, background:'#e2e8f0' }} />
+          </tr>
+        );
+      }
+      lastPos = pos;
+      rows.push(renderStaffRow(s));
+    });
+    return rows;
+  };
+
   const renderStaffRow = (s) => {
     let totalH = 0, kyukeiCnt = 0, yukyuCnt = 0, kyuCnt = 0;
     const cells = days.map(d => {
@@ -449,19 +467,19 @@ function ShiftMonthMatrix({ staff, master, shifts, days, duties, showDuty, dutyO
             <>
               {nikkiStaff.length > 0 && <>
                 <ShiftSectionHeader label="日直" color="#1d4ed8" bg="#dbeafe" days={days} />
-                {nikkiStaff.map(renderStaffRow)}
+                {renderGroupRows(nikkiStaff)}
               </>}
               {tochiStaff.length > 0 && <>
                 <ShiftSectionHeader label="当直" color="#be185d" bg="#fce7f3" days={days} />
-                {tochiStaff.map(renderStaffRow)}
+                {renderGroupRows(tochiStaff)}
               </>}
               {otherStaff.length > 0 && <>
                 <ShiftSectionHeader label="その他" color="#6b7280" bg="#f3f4f6" days={days} />
-                {otherStaff.map(renderStaffRow)}
+                {renderGroupRows(otherStaff)}
               </>}
             </>
           ) : (
-            otherStaff.map(renderStaffRow)
+            renderGroupRows(otherStaff)
           )}
           {showDuty && DUTY_TYPES.map(dtype => (
             <tr key={dtype} style={{ background:'#f0f4ff' }}>
@@ -897,4 +915,4 @@ function DutyEditModal({ dutyType, date, officeId, staff, currentStaffId, onClos
   );
 }
 
-Object.assign(window, { ShiftPage, fmtTime });
+Object.assign(window, { ShiftPage, ShiftMonthMatrix, ShiftEditModal, fmtTime, POSITION_ORDER, posOrder });
