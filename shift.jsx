@@ -236,17 +236,6 @@ function ShiftPage({ auth }) {
             <button className={view === 'gantt' ? 'active' : ''} onClick={() => setView('gantt')}>日</button>
           </div>
 
-          {officeId !== 'ALL' && (
-            <div className="legend">
-              {shiftMaster.map(t => (
-                <span key={t.id} className="leg">
-                  <span className="sw" style={{ background: t.color }}></span>
-                  {t.label}
-                  {t.start_time && ` ${fmtTime(t.start_time)}-${fmtTime(t.end_time)}`}
-                </span>
-              ))}
-            </div>
-          )}
         </div>
 
         {loadingShifts && (
