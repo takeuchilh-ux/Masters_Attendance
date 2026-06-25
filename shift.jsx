@@ -420,7 +420,6 @@ function ShiftMonthMatrix({ staff, master, shifts, days, duties, showDuty, dutyO
       <tr key={s.id}>
         <td className="sticky-l">
           <div className="row-name" style={{ flexWrap:'nowrap', minWidth:0 }}>
-            <span className="avatar sm" style={{ flexShrink:0 }}>{s.name.slice(0, 1)}</span>
             <span style={{ minWidth:0, overflow:'hidden' }}>
               <div style={{ fontSize:12, fontWeight:700, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.name}</div>
               {s.position && <div style={{ fontSize:9, color:'var(--muted)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.position}</div>}
@@ -539,7 +538,6 @@ function WeekView({ staff, shifts, master, year, month, onCellClick }) {
         {staff.map(s => (
           <React.Fragment key={s.id}>
             <div className="wk-name">
-              <span className="avatar sm">{s.name.slice(0, 1)}</span>
               <strong>{s.name}</strong>
             </div>
             {days.map((d, i) => {
@@ -594,8 +592,7 @@ function GanttView({ staff, shifts, master, year, month }) {
           return (
             <div key={s.id} className="gantt-row" style={{ gridTemplateColumns: `200px 1fr` }}>
               <div className="wk-name">
-                <span className="avatar sm">{s.name.slice(0, 1)}</span>
-                <strong>{s.name}</strong>
+                  <strong>{s.name}</strong>
               </div>
               <div className="gantt-track">
                 {sm?.start_time && (

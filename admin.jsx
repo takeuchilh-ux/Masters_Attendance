@@ -899,7 +899,6 @@ function StaffAdminPage() {
                   <td className="rownum">{i + 1}</td>
                   <td>
                     <div className="row-name" style={{ cursor: 'pointer' }} onClick={() => setViewing(s)}>
-                      <span className="avatar sm">{s.name.slice(0, 1)}</span>
                       <strong style={{ textDecoration: 'underline', color: 'var(--primary)' }}>{s.name}</strong>
                     </div>
                   </td>
