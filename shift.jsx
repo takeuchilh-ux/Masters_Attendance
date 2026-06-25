@@ -872,18 +872,18 @@ function ShiftMasterSection({ officeId, onClose }) {
                   </td>
                   <td>
                     <input className="cell-input mono" type="time"
-                      value={t.start_time?.slice(0,5) || ''}
-                      onChange={e => updateType(t.id, 'start_time', e.target.value)} />
+                      defaultValue={t.start_time?.slice(0,5) || ''}
+                      onBlur={e => updateType(t.id, 'start_time', e.target.value)} />
                   </td>
                   <td>
                     <input className="cell-input mono" type="time"
-                      value={t.end_time?.slice(0,5) || ''}
-                      onChange={e => updateType(t.id, 'end_time', e.target.value)} />
+                      defaultValue={t.end_time?.slice(0,5) || ''}
+                      onBlur={e => updateType(t.id, 'end_time', e.target.value)} />
                   </td>
                   <td>
                     <input className="cell-input mono" type="number"
-                      value={t.break_minutes}
-                      onChange={e => updateType(t.id, 'break_minutes', +e.target.value)}
+                      defaultValue={t.break_minutes}
+                      onBlur={e => updateType(t.id, 'break_minutes', +e.target.value)}
                       style={{ width: 56 }} />
                   </td>
                   <td className="mono" style={{ fontSize: 12 }}>{calcWork(t)}</td>
