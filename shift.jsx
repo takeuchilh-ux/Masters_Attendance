@@ -87,7 +87,7 @@ function ShiftPage({ auth }) {
     ]).then(([sRes, dRes]) => {
       const map = {};
       (sRes.data || []).forEach(s => {
-        map[`${s.staff_id}|${s.date}`] = {
+        map[`${s.staff_id}|${s.date}|${s.section||''}`] = {
           typeId:   s.shift_type_id,
           override: (s.override_start || s.override_end)
             ? { start: fmtTime(s.override_start), end: fmtTime(s.override_end) }
@@ -125,8 +125,8 @@ function ShiftPage({ auth }) {
     return result;
   }, [year, month]);
 
-  async function saveShift(staffId, iso, typeId, override, notes) {
-    const key      = `${staffId}|${iso}`;
+  async function saveShift(staffId, iso, typeId, override, notes, section) {
+    const key      = `${staffId}|${iso}|${section||''}`;
     const existing = shifts[key];
 
     if (!typeId) {
@@ -145,6 +145,7 @@ function ShiftPage({ auth }) {
       override_start: override?.start || null,
       override_end:   override?.end   || null,
       notes:          notes || null,
+      section:        section || null,
     };
 
     if (existing?.dbId) {
@@ -251,7 +252,7 @@ function ShiftPage({ auth }) {
             duties={duties}
             showDuty={officeId !== FUJISAWA_OFFICE_ID_SHIFT}
             dutyOfficeId={officeId}
-            onCellClick={(staffId, iso, staffOfficeId) => setEditing({ staffId, date: iso, officeId: staffOfficeId })}
+            onCellClick={(staffId, iso, staffOfficeId, section) => setEditing({ staffId, date: iso, officeId: staffOfficeId, section })}
             onDutyClick={(offId, iso, dutyType) => setDutyEditing({ officeId: offId, date: iso, dutyType })}
             allStaff={officeStaff}
           />
@@ -276,7 +277,7 @@ function ShiftPage({ auth }) {
                   duties={duties}
                   showDuty={office.id !== FUJISAWA_OFFICE_ID_SHIFT}
                   dutyOfficeId={office.id}
-                  onCellClick={(staffId, iso, staffOfficeId) => setEditing({ staffId, date: iso, officeId: staffOfficeId })}
+                  onCellClick={(staffId, iso, staffOfficeId, section) => setEditing({ staffId, date: iso, officeId: staffOfficeId, section })}
                   onDutyClick={(offId, iso, dutyType) => setDutyEditing({ officeId: offId, date: iso, dutyType })}
                   allStaff={staffForOffice}
                 />
@@ -310,16 +311,16 @@ function ShiftPage({ auth }) {
         <ShiftEditModalAdmin
           sel={editing}
           master={allShiftTypes.filter(t => t.office_id === (editing.officeId || officeId))}
-          current={shifts[`${editing.staffId}|${editing.date}`]}
+          current={shifts[`${editing.staffId}|${editing.date}|${editing.section||''}`]}
           staffName={officeStaff.find(s => s.id === editing.staffId)?.name}
           onClose={() => setEditing(null)}
           onSave={async (typeId, override, notes) => {
-            await saveShift(editing.staffId, editing.date, typeId, override, notes);
+            await saveShift(editing.staffId, editing.date, typeId, override, notes, editing.section);
             showToast('シフトを更新しました');
             setEditing(null);
           }}
           onDelete={async () => {
-            await saveShift(editing.staffId, editing.date, null, null);
+            await saveShift(editing.staffId, editing.date, null, null, null, editing.section);
             showToast('シフトを削除しました');
             setEditing(null);
           }}
@@ -394,7 +395,7 @@ function ShiftMonthMatrix({ staff, master, shifts, days, duties, showDuty, dutyO
     return groups;
   };
 
-  const renderSection = (label, color, bg, arr, showSec) => {
+  const renderSection = (label, color, bg, arr, showSec, sectionKey) => {
     if (!arr.length) return null;
     const groups = groupByPos(arr);
     const totalRows = arr.length;
@@ -404,8 +405,9 @@ function ShiftMonthMatrix({ staff, master, shifts, days, duties, showDuty, dutyO
     groups.forEach(({ pos, members }) => {
       members.forEach((s, mi) => {
         let totalH = 0, kyukeiCnt = 0, yukyuCnt = 0, kyuCnt = 0;
+        const sec = s.duty_category === '両方' ? sectionKey : '';
         const cells = days.map(d => {
-          const sh  = shifts[`${s.id}|${d.iso}`];
+          const sh  = shifts[`${s.id}|${d.iso}|${sec}`];
           const sm  = sh ? master.find(x => x.id === sh.typeId) : null;
           const start = fmtTime(sh?.override?.start || sm?.start_time);
           const end   = fmtTime(sh?.override?.end   || sm?.end_time);
@@ -421,7 +423,7 @@ function ShiftMonthMatrix({ staff, master, shifts, days, duties, showDuty, dutyO
           if (sm?.label === '休')   kyuCnt++;
           return (
             <td key={d.n} className={`shift-cell ${d.dow===0?'sun':d.dow===6?'sat':''}`}
-              onClick={() => onCellClick(s.id, d.iso, s.office_id)}>
+              onClick={() => onCellClick(s.id, d.iso, s.office_id, sec)}>
               {sm && (
                 <div className="cell-shift" style={{ background: sm.color }}>
                   <div className="lbl">{sm.label}</div>
@@ -506,12 +508,12 @@ function ShiftMonthMatrix({ staff, master, shifts, days, duties, showDuty, dutyO
         <tbody>
           {hasCategories ? (
             <>
-              {renderSection('日直', '#1d4ed8', '#dbeafe', nikkiStaff, true)}
-              {renderSection('当直', '#be185d', '#fce7f3', tochiStaff, true)}
-              {otherStaff.length > 0 && renderSection('その他', '#6b7280', '#f3f4f6', otherStaff, true)}
+              {renderSection('日直', '#1d4ed8', '#dbeafe', nikkiStaff, true, '日直')}
+              {renderSection('当直', '#be185d', '#fce7f3', tochiStaff, true, '当直')}
+              {otherStaff.length > 0 && renderSection('その他', '#6b7280', '#f3f4f6', otherStaff, true, '')}
             </>
           ) : (
-            renderSection('', '', '', otherStaff, false)
+            renderSection('', '', '', otherStaff, false, '')
           )}
           {showDuty && DUTY_TYPES.map(dtype => (
             <tr key={dtype} style={{ background:'#f0f4ff' }}>

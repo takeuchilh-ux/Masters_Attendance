@@ -250,7 +250,7 @@ function OfficeShiftPage({ officeId }) {
     ]).then(([shRes, dutyRes]) => {
       const smap = {};
       (shRes.data || []).forEach(s => {
-        smap[`${s.staff_id}|${s.date}`] = {
+        smap[`${s.staff_id}|${s.date}|${s.section||''}`] = {
           typeId: s.shift_type_id, dbId: s.id,
           override: (s.override_start || s.override_end)
             ? { start: fmtTime(s.override_start), end: fmtTime(s.override_end) } : null,
@@ -267,8 +267,8 @@ function OfficeShiftPage({ officeId }) {
     });
   }, [officeId, periodStart, periodEnd]);
 
-  async function saveShift(staffId, iso, typeId, override, notes) {
-    const key = `${staffId}|${iso}`;
+  async function saveShift(staffId, iso, typeId, override, notes, section) {
+    const key = `${staffId}|${iso}|${section||''}`;
     const ex  = shifts[key];
     if (!typeId) {
       if (ex?.dbId) await mdb('shifts').delete().eq('id', ex.dbId);
@@ -277,7 +277,7 @@ function OfficeShiftPage({ officeId }) {
     }
     const payload = { staff_id: staffId, office_id: officeId, date: iso, shift_type_id: typeId,
       override_start: override?.start || null, override_end: override?.end || null,
-      notes: notes || null };
+      notes: notes || null, section: section || null };
     if (ex?.dbId) {
       await mdb('shifts').update(payload).eq('id', ex.dbId);
       setShifts(s => ({ ...s, [key]: { typeId, override, notes, dbId: ex.dbId } }));
@@ -315,7 +315,7 @@ function OfficeShiftPage({ officeId }) {
             showDuty={true}
             dutyOfficeId={officeId}
             allStaff={staff}
-            onCellClick={(staffId, iso) => setEditing({ staffId, date: iso })}
+            onCellClick={(staffId, iso, offId, section) => setEditing({ staffId, date: iso, section })}
             onDutyClick={() => {}}
           />
         )}
@@ -325,10 +325,10 @@ function OfficeShiftPage({ officeId }) {
           staffName={staff.find(s => s.id === editing.staffId)?.name || ''}
           date={editing.date}
           shiftTypes={shiftTypes}
-          current={shifts[`${editing.staffId}|${editing.date}`]}
+          current={shifts[`${editing.staffId}|${editing.date}|${editing.section||''}`]}
           onClose={() => setEditing(null)}
-          onSave={async (typeId, override, notes) => { await saveShift(editing.staffId, editing.date, typeId, override, notes); setEditing(null); }}
-          onDelete={async () => { await saveShift(editing.staffId, editing.date, null, null); setEditing(null); }}
+          onSave={async (typeId, override, notes) => { await saveShift(editing.staffId, editing.date, typeId, override, notes, editing.section); setEditing(null); }}
+          onDelete={async () => { await saveShift(editing.staffId, editing.date, null, null, null, editing.section); setEditing(null); }}
         />
       )}
     </div>
