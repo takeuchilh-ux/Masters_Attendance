@@ -352,6 +352,8 @@ function ShiftPage({ auth }) {
 
 const FUJISAWA_OFFICE_ID_SHIFT = '416ff2a2-76f6-4087-b1de-86e1412dfd0b';
 const DUTY_TYPES = ['日直', '準夜', '夜勤'];
+const POSITION_ORDER = ['サブマネージャー','リーダー','会計リーダー','サブリーダー','担当','端末電話','搬送','搬送端末','薬剤'];
+const posOrder = (p) => { const i = POSITION_ORDER.indexOf(p); return i === -1 ? 99 : i; };
 
 // ============================================================
 // ShiftMonthMatrix - 月次シフト表（単一事業所）
@@ -372,10 +374,11 @@ function ShiftSectionHeader({ label, color, bg, days }) {
 
 function ShiftMonthMatrix({ staff, master, shifts, days, duties, showDuty, dutyOfficeId, onCellClick, onDutyClick, allStaff }) {
   // duty_category による分割: 日直グループ / 当直グループ / 未設定
+  const sortByPos = (arr) => [...arr].sort((a, b) => posOrder(a.position) - posOrder(b.position));
   const hasCategories = staff.some(s => s.duty_category);
-  const nikkiStaff  = hasCategories ? staff.filter(s => s.duty_category === '日直' || s.duty_category === '両方') : [];
-  const tochiStaff  = hasCategories ? staff.filter(s => s.duty_category === '当直' || s.duty_category === '両方') : [];
-  const otherStaff  = hasCategories ? staff.filter(s => !s.duty_category) : staff;
+  const nikkiStaff  = hasCategories ? sortByPos(staff.filter(s => s.duty_category === '日直' || s.duty_category === '両方')) : [];
+  const tochiStaff  = hasCategories ? sortByPos(staff.filter(s => s.duty_category === '当直' || s.duty_category === '両方')) : [];
+  const otherStaff  = hasCategories ? sortByPos(staff.filter(s => !s.duty_category)) : sortByPos(staff);
 
   const renderStaffRow = (s) => {
     let totalH = 0, kyukeiCnt = 0, yukyuCnt = 0, kyuCnt = 0;
@@ -410,11 +413,9 @@ function ShiftMonthMatrix({ staff, master, shifts, days, duties, showDuty, dutyO
     return (
       <tr key={s.id}>
         <td className="sticky-l">
-          <div className="row-name" style={{ flexWrap:'nowrap', minWidth:0 }}>
-            <span style={{ minWidth:0, overflow:'hidden' }}>
-              <div style={{ fontSize:12, fontWeight:700, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.name}</div>
-              {s.position && <div style={{ fontSize:9, color:'var(--muted)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.position}</div>}
-            </span>
+          <div style={{ display:'flex', flexDirection:'column', gap:1, minWidth:0, overflow:'hidden' }}>
+            <div style={{ fontSize:11, fontWeight:700, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', lineHeight:1.3 }}>{s.name.replace(/\s+/g,'')}</div>
+            {s.position && <div style={{ fontSize:9, color:'#64748b', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', lineHeight:1.2 }}>{s.position}</div>}
           </div>
         </td>
         {cells}
