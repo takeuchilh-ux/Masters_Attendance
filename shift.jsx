@@ -822,9 +822,9 @@ function ShiftMasterSection({ officeId, onClose }) {
     await Promise.all(localTypes.map(async t => {
       const { error } = await mdb('shift_types').update({
         label: t.label,
-        start_time: t.start_time,
-        end_time: t.end_time,
-        break_minutes: t.break_minutes,
+        start_time: t.start_time || null,
+        end_time: t.end_time || null,
+        break_minutes: t.break_minutes || 0,
         color: t.color,
       }).eq('id', t.id);
       if (error) errors.push(error.message);
