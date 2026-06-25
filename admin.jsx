@@ -810,12 +810,13 @@ function StaffAdminPage() {
   async function saveStaff(form) {
     // DBに送るフィールドを明示的に指定（UI専用フィールドを除外）
     const payload = {
-      name:       form.name,
-      office_id:  form.office_id  || null,
-      role:       form.role       || 'staff',
-      birth_mmdd: form.birth_mmdd || null,
-      email:      form.email      || null,
-      position:   form.position   || null,
+      name:           form.name,
+      office_id:      form.office_id      || null,
+      role:           form.role           || 'staff',
+      birth_mmdd:     form.birth_mmdd     || null,
+      email:          form.email          || null,
+      position:       form.position       || null,
+      duty_category:  form.duty_category  || null,
     };
 
     if (form.id) {
@@ -885,11 +886,11 @@ function StaffAdminPage() {
 
         <table className="sheet">
           <thead><tr>
-            <th style={{width:32}}></th><th className="rownum"></th><th>氏名</th><th>役職</th><th>事業所</th><th>権限</th>
+            <th style={{width:32}}></th><th className="rownum"></th><th>氏名</th><th>担当</th><th>役職</th><th>事業所</th><th>権限</th>
             <th>生年月日</th><th>登録日</th><th>操作</th>
           </tr></thead>
           <tbody ref={tbodyRef}>
-            {filtered.length === 0 && <tr><td colSpan={9} className="empty">スタッフがいません</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={10} className="empty">スタッフがいません</td></tr>}
             {filtered.map((s, i) => {
               const office = offices.find(o => o.id === s.office_id);
               return (
@@ -901,6 +902,11 @@ function StaffAdminPage() {
                       <span className="avatar sm">{s.name.slice(0, 1)}</span>
                       <strong style={{ textDecoration: 'underline', color: 'var(--primary)' }}>{s.name}</strong>
                     </div>
+                  </td>
+                  <td style={{ fontSize:11 }}>
+                    {s.duty_category
+                      ? <span style={{ background: s.duty_category === '日直' ? '#dbeafe' : s.duty_category === '当直' ? '#fce7f3' : '#f3e8ff', color: s.duty_category === '日直' ? '#1d4ed8' : s.duty_category === '当直' ? '#be185d' : '#7e22ce', borderRadius:4, padding:'1px 6px', fontWeight:700, fontSize:11 }}>{s.duty_category}</span>
+                      : <span className="muted">—</span>}
                   </td>
                   <td style={{ fontSize:12 }}>{s.position || <span className="muted">—</span>}</td>
                   <td>{office?.name || '—'}</td>
@@ -981,14 +987,15 @@ function StaffDetailModal({ staff: s, offices, onClose, onEdit }) {
 function StaffEditModal({ staff: s, offices, positionTypes = [], setPositionTypes, onClose, onSave }) {
   const parts = (s.name || '').split(/\s+/);
   const [form, setForm] = useStateA({
-    id:          s.id,
-    last_name:   parts[0] || '',
-    first_name:  parts.slice(1).join(' ') || '',
-    office_id:   s.office_id   || offices[0]?.id,
-    role:        s.role        || 'staff',
-    birth_mmdd:  s.birth_mmdd  || '',
-    email:       s.email       || '',
-    position:    s.position    || '',
+    id:             s.id,
+    last_name:      parts[0] || '',
+    first_name:     parts.slice(1).join(' ') || '',
+    office_id:      s.office_id      || offices[0]?.id,
+    role:           s.role           || 'staff',
+    birth_mmdd:     s.birth_mmdd     || '',
+    email:          s.email          || '',
+    position:       s.position       || '',
+    duty_category:  s.duty_category  || '',
   });
   const [newPos, setNewPos] = useStateA('');
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -1048,15 +1055,26 @@ function StaffEditModal({ staff: s, offices, positionTypes = [], setPositionType
               <input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="任意" />
             </label>
           </div>
-          <label className="field">
-            <span>役職</span>
-            <input list="position-list" value={form.position}
-              onChange={e => set('position', e.target.value)}
-              placeholder="役職を入力または選択" />
-            <datalist id="position-list">
-              {positionTypes.map(p => <option key={p.id} value={p.label} />)}
-            </datalist>
-          </label>
+          <div className="form-row2">
+            <label className="field">
+              <span>担当区分</span>
+              <select value={form.duty_category} onChange={e => set('duty_category', e.target.value)}>
+                <option value="">— 未設定 —</option>
+                <option value="日直">日直</option>
+                <option value="当直">当直</option>
+                <option value="両方">両方（日直・当直）</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>役職</span>
+              <input list="position-list" value={form.position}
+                onChange={e => set('position', e.target.value)}
+                placeholder="役職を入力または選択" />
+              <datalist id="position-list">
+                {positionTypes.map(p => <option key={p.id} value={p.label} />)}
+              </datalist>
+            </label>
+          </div>
           <details style={{ marginTop:8 }}>
             <summary style={{ fontSize:12, color:'var(--muted)', cursor:'pointer', userSelect:'none' }}>役職マスタを編集</summary>
             <div style={{ background:'#f8fafc', borderRadius:8, padding:'10px 12px', marginTop:6 }}>

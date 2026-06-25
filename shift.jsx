@@ -367,7 +367,75 @@ const DUTY_TYPES = ['日直', '準夜', '夜勤'];
 // ============================================================
 // ShiftMonthMatrix - 月次シフト表（単一事業所）
 // ============================================================
+function ShiftSectionHeader({ label, color, bg, days }) {
+  return (
+    <tr>
+      <td className="sticky-l" style={{ background: bg, padding: '4px 8px' }}>
+        <span style={{ fontSize:11, fontWeight:800, color, letterSpacing:1 }}>◆ {label}</span>
+      </td>
+      {days.map(d => (
+        <td key={d.iso} style={{ background: bg, height: 20 }}></td>
+      ))}
+      <td style={{ background: bg }}></td>
+    </tr>
+  );
+}
+
 function ShiftMonthMatrix({ staff, master, shifts, days, duties, showDuty, dutyOfficeId, onCellClick, onDutyClick, allStaff }) {
+  // duty_category による分割: 日直グループ / 当直グループ / 未設定
+  const hasCategories = staff.some(s => s.duty_category);
+  const nikkiStaff  = hasCategories ? staff.filter(s => s.duty_category === '日直' || s.duty_category === '両方') : [];
+  const tochiStaff  = hasCategories ? staff.filter(s => s.duty_category === '当直' || s.duty_category === '両方') : [];
+  const otherStaff  = hasCategories ? staff.filter(s => !s.duty_category) : staff;
+
+  const renderStaffRow = (s) => {
+    let totalH = 0, kyukeiCnt = 0, yukyuCnt = 0, kyuCnt = 0;
+    const cells = days.map(d => {
+      const sh  = shifts[`${s.id}|${d.iso}`];
+      const sm  = sh ? master.find(x => x.id === sh.typeId) : null;
+      const start = fmtTime(sh?.override?.start || sm?.start_time);
+      const end   = fmtTime(sh?.override?.end   || sm?.end_time);
+      if (start && end) {
+        const [ih, im] = start.split(':').map(Number);
+        const [oh, om] = end.split(':').map(Number);
+        totalH += (oh * 60 + om - ih * 60 - im - (sm?.break_minutes || 60)) / 60;
+      }
+      if (sm?.label === '公休') kyukeiCnt++;
+      if (sm?.label === '有給') yukyuCnt++;
+      if (sm?.label === '休')   kyuCnt++;
+      return (
+        <td key={d.n} className={`shift-cell ${d.dow === 0 ? 'sun' : d.dow === 6 ? 'sat' : ''}`}
+          onClick={() => onCellClick(s.id, d.iso, s.office_id)}>
+          {sm && (
+            <div className="cell-shift" style={{ background: sm.color }}>
+              <div className="lbl">{sm.label}</div>
+              {start && <div className="time mono">{fmtShort(start)}〜{fmtShort(end)}</div>}
+              {sh?.notes && <div className="lbl" style={{ fontSize:9, opacity:.8, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:'100%' }}>{sh.notes.length > 6 ? sh.notes.slice(0,6)+'…' : sh.notes}</div>}
+            </div>
+          )}
+        </td>
+      );
+    });
+    return (
+      <tr key={s.id}>
+        <td className="sticky-l">
+          <div className="row-name">
+            <span className="avatar sm">{s.name.slice(0, 1)}</span>
+            <strong>{s.name}</strong>
+            {s.position && <span style={{ fontSize:9, color:'var(--muted)', marginLeft:2 }}>{s.position}</span>}
+          </div>
+        </td>
+        {cells}
+        <td className="total" style={{ fontSize:11, lineHeight:1.6 }}>
+          <strong className="mono">{Math.round(totalH)}h</strong>
+          {kyukeiCnt > 0 && <div style={{ color:'#ef4444' }}>公休{kyukeiCnt}</div>}
+          {yukyuCnt  > 0 && <div style={{ color:'#16a34a' }}>有給{yukyuCnt}</div>}
+          {kyuCnt    > 0 && <div style={{ color:'#dc2626' }}>休{kyuCnt}</div>}
+        </td>
+      </tr>
+    );
+  };
+
   return (
     <div className="shift-matrix-wrap">
       <table className="shift-matrix">
@@ -384,54 +452,24 @@ function ShiftMonthMatrix({ staff, master, shifts, days, duties, showDuty, dutyO
           </tr>
         </thead>
         <tbody>
-          {staff.map(s => {
-            let totalH = 0, kyukeiCnt = 0, yukyuCnt = 0, kyuCnt = 0;
-            return (
-              <tr key={s.id}>
-                <td className="sticky-l">
-                  <div className="row-name">
-                    <span className="avatar sm">{s.name.slice(0, 1)}</span>
-                    <strong>{s.name}</strong>
-                  </div>
-                </td>
-                {days.map(d => {
-                  const sh  = shifts[`${s.id}|${d.iso}`];
-                  const sm  = sh ? master.find(x => x.id === sh.typeId) : null;
-                  const start = fmtTime(sh?.override?.start || sm?.start_time);
-                  const end   = fmtTime(sh?.override?.end   || sm?.end_time);
-                  if (start && end) {
-                    const [ih, im] = start.split(':').map(Number);
-                    const [oh, om] = end.split(':').map(Number);
-                    totalH += (oh * 60 + om - ih * 60 - im - (sm?.break_minutes || 60)) / 60;
-                  }
-                  if (sm?.label === '公休') kyukeiCnt++;
-                  if (sm?.label === '有給') yukyuCnt++;
-                  if (sm?.label === '休')   kyuCnt++;
-                  return (
-                    <td
-                      key={d.n}
-                      className={`shift-cell ${d.dow === 0 ? 'sun' : d.dow === 6 ? 'sat' : ''}`}
-                      onClick={() => onCellClick(s.id, d.iso, s.office_id)}
-                    >
-                      {sm && (
-                        <div className="cell-shift" style={{ background: sm.color }}>
-                          <div className="lbl">{sm.label}</div>
-                          {start && <div className="time mono">{fmtShort(start)}〜{fmtShort(end)}</div>}
-                          {sh?.notes && <div className="lbl" style={{ fontSize:9, opacity:.8, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:'100%' }}>{sh.notes.length > 6 ? sh.notes.slice(0,6)+'…' : sh.notes}</div>}
-                        </div>
-                      )}
-                    </td>
-                  );
-                })}
-                <td className="total" style={{ fontSize:11, lineHeight:1.6 }}>
-                  <strong className="mono">{Math.round(totalH)}h</strong>
-                  {kyukeiCnt > 0 && <div style={{ color:'#ef4444' }}>公休{kyukeiCnt}</div>}
-                  {yukyuCnt  > 0 && <div style={{ color:'#16a34a' }}>有給{yukyuCnt}</div>}
-                  {kyuCnt    > 0 && <div style={{ color:'#dc2626' }}>休{kyuCnt}</div>}
-                </td>
-              </tr>
-            );
-          })}
+          {hasCategories ? (
+            <>
+              {nikkiStaff.length > 0 && <>
+                <ShiftSectionHeader label="日直" color="#1d4ed8" bg="#dbeafe" days={days} />
+                {nikkiStaff.map(renderStaffRow)}
+              </>}
+              {tochiStaff.length > 0 && <>
+                <ShiftSectionHeader label="当直" color="#be185d" bg="#fce7f3" days={days} />
+                {tochiStaff.map(renderStaffRow)}
+              </>}
+              {otherStaff.length > 0 && <>
+                <ShiftSectionHeader label="その他" color="#6b7280" bg="#f3f4f6" days={days} />
+                {otherStaff.map(renderStaffRow)}
+              </>}
+            </>
+          ) : (
+            otherStaff.map(renderStaffRow)
+          )}
           {showDuty && DUTY_TYPES.map(dtype => (
             <tr key={dtype} style={{ background:'#f0f4ff' }}>
               <td className="sticky-l" style={{ background:'#e8eeff' }}>
