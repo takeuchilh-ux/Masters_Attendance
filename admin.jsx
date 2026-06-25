@@ -1067,12 +1067,10 @@ function StaffEditModal({ staff: s, offices, positionTypes = [], setPositionType
             </label>
             <label className="field">
               <span>役割</span>
-              <input list="position-list" value={form.position}
-                onChange={e => set('position', e.target.value)}
-                placeholder="役割を入力または選択" />
-              <datalist id="position-list">
-                {positionTypes.map(p => <option key={p.id} value={p.label} />)}
-              </datalist>
+              <select value={form.position} onChange={e => set('position', e.target.value)}>
+                <option value="">— 未設定 —</option>
+                {positionTypes.map(p => <option key={p.id} value={p.label}>{p.label}</option>)}
+              </select>
             </label>
           </div>
           <details style={{ marginTop:8 }}>
