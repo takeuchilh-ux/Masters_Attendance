@@ -380,24 +380,6 @@ function ShiftMonthMatrix({ staff, master, shifts, days, duties, showDuty, dutyO
   const tochiStaff  = hasCategories ? sortByPos(staff.filter(s => s.duty_category === '当直' || s.duty_category === '両方')) : [];
   const otherStaff  = hasCategories ? sortByPos(staff.filter(s => !s.duty_category)) : sortByPos(staff);
 
-  const renderGroupRows = (arr) => {
-    const rows = [];
-    let lastPos = undefined;
-    arr.forEach(s => {
-      const pos = s.position || '';
-      if (lastPos !== undefined && pos !== lastPos) {
-        rows.push(
-          <tr key={`sep-${s.id}`} style={{ height:2 }}>
-            <td colSpan={days.length + 2} style={{ padding:0, background:'#e2e8f0' }} />
-          </tr>
-        );
-      }
-      lastPos = pos;
-      rows.push(renderStaffRow(s));
-    });
-    return rows;
-  };
-
   const renderStaffRow = (s) => {
     let totalH = 0, kyukeiCnt = 0, yukyuCnt = 0, kyuCnt = 0;
     const cells = days.map(d => {
@@ -445,6 +427,24 @@ function ShiftMonthMatrix({ staff, master, shifts, days, duties, showDuty, dutyO
         </td>
       </tr>
     );
+  };
+
+  const renderGroupRows = (arr) => {
+    const rows = [];
+    let lastPos = undefined;
+    arr.forEach(s => {
+      const pos = s.position || '';
+      if (lastPos !== undefined && pos !== lastPos) {
+        rows.push(
+          <tr key={`sep-${s.id}`} style={{ height:2 }}>
+            <td colSpan={days.length + 2} style={{ padding:0, background:'#e2e8f0' }} />
+          </tr>
+        );
+      }
+      lastPos = pos;
+      rows.push(renderStaffRow(s));
+    });
+    return rows;
   };
 
   return (
