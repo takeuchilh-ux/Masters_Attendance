@@ -886,7 +886,7 @@ function StaffAdminPage() {
 
         <table className="sheet">
           <thead><tr>
-            <th style={{width:32}}></th><th className="rownum"></th><th>氏名</th><th>担当</th><th>役職</th><th>事業所</th><th>権限</th>
+            <th style={{width:32}}></th><th className="rownum"></th><th>氏名</th><th>担当</th><th>役割</th><th>事業所</th><th>権限</th>
             <th>生年月日</th><th>登録日</th><th>操作</th>
           </tr></thead>
           <tbody ref={tbodyRef}>
@@ -1066,17 +1066,17 @@ function StaffEditModal({ staff: s, offices, positionTypes = [], setPositionType
               </select>
             </label>
             <label className="field">
-              <span>役職</span>
+              <span>役割</span>
               <input list="position-list" value={form.position}
                 onChange={e => set('position', e.target.value)}
-                placeholder="役職を入力または選択" />
+                placeholder="役割を入力または選択" />
               <datalist id="position-list">
                 {positionTypes.map(p => <option key={p.id} value={p.label} />)}
               </datalist>
             </label>
           </div>
           <details style={{ marginTop:8 }}>
-            <summary style={{ fontSize:12, color:'var(--muted)', cursor:'pointer', userSelect:'none' }}>役職マスタを編集</summary>
+            <summary style={{ fontSize:12, color:'var(--muted)', cursor:'pointer', userSelect:'none' }}>役割マスタを編集</summary>
             <div style={{ background:'#f8fafc', borderRadius:8, padding:'10px 12px', marginTop:6 }}>
               <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:8 }}>
                 {positionTypes.map(p => (
@@ -1089,7 +1089,7 @@ function StaffEditModal({ staff: s, offices, positionTypes = [], setPositionType
               <div style={{ display:'flex', gap:6 }}>
                 <input value={newPos} onChange={e => setNewPos(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && addPositionType()}
-                  placeholder="新しい役職名" style={{ flex:1, border:'1px solid #d1d5db', borderRadius:6, padding:'4px 8px', fontSize:13 }} />
+                  placeholder="新しい役割名" style={{ flex:1, border:'1px solid #d1d5db', borderRadius:6, padding:'4px 8px', fontSize:13 }} />
                 <button className="btn-mini" onClick={addPositionType}>追加</button>
               </div>
             </div>
