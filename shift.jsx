@@ -398,7 +398,9 @@ function ShiftMonthMatrix({ staff, master, shifts, days, duties, showDuty, dutyO
       if (start && end) {
         const [ih, im] = start.split(':').map(Number);
         const [oh, om] = end.split(':').map(Number);
-        totalH += (oh * 60 + om - ih * 60 - im - (sm?.break_minutes || 60)) / 60;
+        let sMin = ih * 60 + im, eMin = oh * 60 + om;
+        if (eMin <= sMin) eMin += 24 * 60;
+        totalH += (eMin - sMin - (sm?.break_minutes || 60)) / 60;
       }
       if (sm?.label === '公休') kyukeiCnt++;
       if (sm?.label === '有給') yukyuCnt++;
@@ -813,7 +815,10 @@ function ShiftMasterSection({ officeId, onClose }) {
             if (t.start_time && t.end_time) {
               const [sh, sm2] = t.start_time.slice(0,5).split(':').map(Number);
               const [eh, em2] = t.end_time.slice(0,5).split(':').map(Number);
-              const m = (eh * 60 + em2) - (sh * 60 + sm2) - (t.break_minutes || 0);
+              let startMin = sh * 60 + sm2;
+              let endMin   = eh * 60 + em2;
+              if (endMin <= startMin) endMin += 24 * 60; // 日跨ぎ
+              const m = endMin - startMin - (t.break_minutes || 0);
               work = `${Math.floor(m / 60)}h ${m % 60}m`;
             }
             return (
