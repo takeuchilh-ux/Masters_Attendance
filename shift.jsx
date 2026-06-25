@@ -419,10 +419,12 @@ function ShiftMonthMatrix({ staff, master, shifts, days, duties, showDuty, dutyO
     return (
       <tr key={s.id}>
         <td className="sticky-l">
-          <div className="row-name">
-            <span className="avatar sm">{s.name.slice(0, 1)}</span>
-            <strong>{s.name}</strong>
-            {s.position && <span style={{ fontSize:9, color:'var(--muted)', marginLeft:2 }}>{s.position}</span>}
+          <div className="row-name" style={{ flexWrap:'nowrap', minWidth:0 }}>
+            <span className="avatar sm" style={{ flexShrink:0 }}>{s.name.slice(0, 1)}</span>
+            <span style={{ minWidth:0, overflow:'hidden' }}>
+              <div style={{ fontSize:12, fontWeight:700, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.name}</div>
+              {s.position && <div style={{ fontSize:9, color:'var(--muted)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.position}</div>}
+            </span>
           </div>
         </td>
         {cells}
