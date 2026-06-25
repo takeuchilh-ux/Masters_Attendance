@@ -774,13 +774,20 @@ function ShiftEditModalAdmin({ sel, master, current, onClose, onSave, onDelete, 
 function ShiftMasterSection({ officeId, onClose }) {
   const { shiftTypes, setShiftTypes, showToast } = useContextS(AppCtx);
   const tbodyRef = useRefS(null);
+  const [localTypes, setLocalTypes] = useStateS([]);
+  const [dirty,  setDirty]  = useStateS(false);
+  const [saving, setSaving] = useStateS(false);
 
-  const officeTypes = useMemoS(
-    () => [...shiftTypes.filter(t => t.office_id === officeId)].sort((a, b) => a.sort_order - b.sort_order),
-    [shiftTypes, officeId]
-  );
+  // グローバル shiftTypes が変わったらローカルに同期
+  useEffectS(() => {
+    setLocalTypes(
+      [...shiftTypes.filter(t => t.office_id === officeId)]
+        .sort((a, b) => a.sort_order - b.sort_order)
+    );
+    setDirty(false);
+  }, [shiftTypes, officeId]);
 
-  // SortableJS ドラッグ並び替え
+  // SortableJS ドラッグ並び替え（即時DB保存）
   useEffectS(() => {
     if (!tbodyRef.current) return;
     const sortable = Sortable.create(tbodyRef.current, {
@@ -788,32 +795,57 @@ function ShiftMasterSection({ officeId, onClose }) {
       handle: '.drag-handle',
       onEnd: async ({ oldIndex, newIndex }) => {
         if (oldIndex === newIndex) return;
-        const reordered = [...officeTypes];
+        const reordered = [...localTypes];
         const [moved] = reordered.splice(oldIndex, 1);
         reordered.splice(newIndex, 0, moved);
-        // sort_order を 10, 20, 30... で再採番
-        const updates = reordered.map((t, i) => ({ id: t.id, sort_order: (i + 1) * 10 }));
+        const updated = reordered.map((t, i) => ({ ...t, sort_order: (i + 1) * 10 }));
+        setLocalTypes(updated);
         setShiftTypes(ts => {
           const map = {};
-          updates.forEach(u => { map[u.id] = u.sort_order; });
+          updated.forEach(u => { map[u.id] = u.sort_order; });
           return ts.map(t => map[t.id] !== undefined ? { ...t, sort_order: map[t.id] } : t);
         });
-        await Promise.all(updates.map(u => mdb('shift_types').update({ sort_order: u.sort_order }).eq('id', u.id)));
+        await Promise.all(updated.map(u => mdb('shift_types').update({ sort_order: u.sort_order }).eq('id', u.id)));
       },
     });
     return () => sortable.destroy();
-  }, [officeTypes]);
+  }, [localTypes]);
+
+  function handleChange(id, field, value) {
+    setLocalTypes(ts => ts.map(t => t.id === id ? { ...t, [field]: value } : t));
+    setDirty(true);
+  }
+
+  async function saveAll() {
+    setSaving(true);
+    const errors = [];
+    await Promise.all(localTypes.map(async t => {
+      const { error } = await mdb('shift_types').update({
+        label: t.label,
+        start_time: t.start_time,
+        end_time: t.end_time,
+        break_minutes: t.break_minutes,
+        color: t.color,
+      }).eq('id', t.id);
+      if (error) errors.push(error.message);
+    }));
+    if (errors.length) { showToast('保存失敗: ' + errors[0], 'error'); setSaving(false); return; }
+    setShiftTypes(ts => ts.map(t => {
+      const lt = localTypes.find(l => l.id === t.id);
+      return lt ? { ...t, ...lt } : t;
+    }));
+    setDirty(false);
+    setSaving(false);
+    showToast('保存しました');
+  }
 
   async function addType() {
-    const maxOrder = officeTypes.length > 0 ? Math.max(...officeTypes.map(t => t.sort_order)) : 0;
+    const maxOrder = localTypes.length > 0 ? Math.max(...localTypes.map(t => t.sort_order)) : 0;
     const newType = {
-      office_id:     officeId,
-      label:         '新シフト',
-      start_time:    '09:00',
-      end_time:      '18:00',
-      break_minutes: 60,
-      color:         '#bfdbfe',
-      sort_order:    maxOrder + 10,
+      office_id: officeId, label: '新シフト',
+      start_time: '09:00', end_time: '18:00',
+      break_minutes: 60, color: '#bfdbfe',
+      sort_order: maxOrder + 10,
     };
     const { error } = await mdb('shift_types').insert(newType);
     if (error) { showToast('追加失敗: ' + error.message, 'error'); return; }
@@ -821,16 +853,11 @@ function ShiftMasterSection({ officeId, onClose }) {
     if (all) setShiftTypes(all);
   }
 
-  async function updateType(id, field, value) {
-    await mdb('shift_types').update({ [field]: value }).eq('id', id);
-    setShiftTypes(ts => ts.map(t => t.id === id ? { ...t, [field]: value } : t));
-  }
-
   async function deleteType(id) {
     if (!confirm('このシフト種別を削除しますか？')) return;
     await mdb('shift_types').delete().eq('id', id);
     setShiftTypes(ts => ts.filter(t => t.id !== id));
-    showToast('シフト種別を削除しました');
+    showToast('削除しました');
   }
 
   function calcWork(t) {
@@ -840,7 +867,7 @@ function ShiftMasterSection({ officeId, onClose }) {
     let startMin = sh * 60 + sm2, endMin = eh * 60 + em2;
     if (endMin <= startMin) endMin += 24 * 60;
     const m = endMin - startMin - (t.break_minutes || 0);
-    return `${Math.floor(m / 60)}h ${m % 60}m`;
+    return `${Math.floor(m / 60)}h${m % 60 ? ' ' + (m % 60) + 'm' : ''}`;
   }
 
   return (
@@ -859,38 +886,38 @@ function ShiftMasterSection({ officeId, onClose }) {
               <th>休憩(分)</th><th>実働</th><th>カラー</th><th>操作</th>
             </tr></thead>
             <tbody ref={tbodyRef}>
-              {officeTypes.length === 0 && (
+              {localTypes.length === 0 && (
                 <tr><td colSpan={9} className="empty">「＋ 追加」から作成してください</td></tr>
               )}
-              {officeTypes.map((t, i) => (
+              {localTypes.map((t, i) => (
                 <tr key={t.id} data-id={t.id}>
                   <td><span className="drag-handle">⠿</span></td>
                   <td className="rownum">{i + 1}</td>
                   <td>
-                    <input className="cell-input" defaultValue={t.label}
-                      onBlur={e => updateType(t.id, 'label', e.target.value)} />
+                    <input className="cell-input" value={t.label}
+                      onChange={e => handleChange(t.id, 'label', e.target.value)} />
                   </td>
                   <td>
                     <input className="cell-input mono" type="time"
-                      defaultValue={t.start_time?.slice(0,5) || ''}
-                      onBlur={e => updateType(t.id, 'start_time', e.target.value)} />
+                      value={t.start_time?.slice(0,5) || ''}
+                      onChange={e => handleChange(t.id, 'start_time', e.target.value)} />
                   </td>
                   <td>
                     <input className="cell-input mono" type="time"
-                      defaultValue={t.end_time?.slice(0,5) || ''}
-                      onBlur={e => updateType(t.id, 'end_time', e.target.value)} />
+                      value={t.end_time?.slice(0,5) || ''}
+                      onChange={e => handleChange(t.id, 'end_time', e.target.value)} />
                   </td>
                   <td>
                     <input className="cell-input mono" type="number"
-                      defaultValue={t.break_minutes}
-                      onBlur={e => updateType(t.id, 'break_minutes', +e.target.value)}
+                      value={t.break_minutes}
+                      onChange={e => handleChange(t.id, 'break_minutes', +e.target.value)}
                       style={{ width: 56 }} />
                   </td>
                   <td className="mono" style={{ fontSize: 12 }}>{calcWork(t)}</td>
                   <td>
                     <div className="color-cell">
                       <input type="color" value={t.color}
-                        onChange={e => updateType(t.id, 'color', e.target.value)} />
+                        onChange={e => handleChange(t.id, 'color', e.target.value)} />
                       <span className="mono small">{t.color}</span>
                     </div>
                   </td>
@@ -904,7 +931,11 @@ function ShiftMasterSection({ officeId, onClose }) {
         </div>
         <div className="modal-foot">
           <button className="btn-ghost" onClick={addType}>＋ 追加</button>
-          <button className="btn-primary" onClick={onClose}>閉じる</button>
+          <button className="btn-primary" onClick={saveAll} disabled={!dirty || saving}
+            style={{ opacity: (!dirty || saving) ? 0.5 : 1 }}>
+            {saving ? '保存中...' : '保存'}
+          </button>
+          <button className="btn-ghost" onClick={onClose}>閉じる</button>
         </div>
       </div>
     </div>
