@@ -1,7 +1,7 @@
 // ============================================================
 // MasuTa! - シフト管理ページ
 // ============================================================
-const { useState: useStateS, useMemo: useMemoS, useContext: useContextS, useEffect: useEffectS } = React;
+const { useState: useStateS, useMemo: useMemoS, useContext: useContextS, useEffect: useEffectS, useRef: useRefS } = React;
 
 // ============================================================
 // 時刻フォーマット（Supabase time型 "HH:MM:SS" → "HH:MM"）
@@ -734,37 +734,43 @@ function ShiftEditModalAdmin({ sel, master, current, onClose, onSave, onDelete, 
 }
 
 // ============================================================
-// ShiftMasterSection - シフト種別マスタ管理
+// ShiftMasterModal - シフト種別マスタ管理（ポップアップ）
 // ============================================================
 function ShiftMasterSection({ officeId, onClose }) {
   const { shiftTypes, setShiftTypes, showToast } = useContextS(AppCtx);
-  // ローカル編集用state（入力中はここだけ更新し、blur時にDBへ保存）
-  const [localEdits, setLocalEdits] = useStateS({});
+  const tbodyRef = useRefS(null);
 
   const officeTypes = useMemoS(
-    () => shiftTypes.filter(t => t.office_id === officeId),
+    () => [...shiftTypes.filter(t => t.office_id === officeId)].sort((a, b) => a.sort_order - b.sort_order),
     [shiftTypes, officeId]
   );
 
-  // ローカル値を取得（編集中ならそちらを優先）
-  const localVal = (id, field, fallback) =>
-    (localEdits[id] && localEdits[id][field] !== undefined) ? localEdits[id][field] : fallback;
-
-  function handleChange(id, field, value) {
-    setLocalEdits(prev => ({ ...prev, [id]: { ...(prev[id] || {}), [field]: value } }));
-  }
-
-  async function handleBlur(id, field, value) {
-    await mdb('shift_types').update({ [field]: value }).eq('id', id);
-    setShiftTypes(ts => ts.map(t => t.id === id ? { ...t, [field]: value } : t));
-    setLocalEdits(prev => {
-      const next = { ...prev };
-      if (next[id]) delete next[id][field];
-      return next;
+  // SortableJS ドラッグ並び替え
+  useEffectS(() => {
+    if (!tbodyRef.current) return;
+    const sortable = Sortable.create(tbodyRef.current, {
+      animation: 150,
+      handle: '.drag-handle',
+      onEnd: async ({ oldIndex, newIndex }) => {
+        if (oldIndex === newIndex) return;
+        const reordered = [...officeTypes];
+        const [moved] = reordered.splice(oldIndex, 1);
+        reordered.splice(newIndex, 0, moved);
+        // sort_order を 10, 20, 30... で再採番
+        const updates = reordered.map((t, i) => ({ id: t.id, sort_order: (i + 1) * 10 }));
+        setShiftTypes(ts => {
+          const map = {};
+          updates.forEach(u => { map[u.id] = u.sort_order; });
+          return ts.map(t => map[t.id] !== undefined ? { ...t, sort_order: map[t.id] } : t);
+        });
+        await Promise.all(updates.map(u => mdb('shift_types').update({ sort_order: u.sort_order }).eq('id', u.id)));
+      },
     });
-  }
+    return () => sortable.destroy();
+  }, [officeTypes]);
 
   async function addType() {
+    const maxOrder = officeTypes.length > 0 ? Math.max(...officeTypes.map(t => t.sort_order)) : 0;
     const newType = {
       office_id:     officeId,
       label:         '新シフト',
@@ -772,11 +778,11 @@ function ShiftMasterSection({ officeId, onClose }) {
       end_time:      '18:00',
       break_minutes: 60,
       color:         '#bfdbfe',
+      sort_order:    maxOrder + 10,
     };
     const { error } = await mdb('shift_types').insert(newType);
     if (error) { showToast('追加失敗: ' + error.message, 'error'); return; }
-    // insertの後、全件再取得してstateを確実に同期
-    const { data: all } = await mdb('shift_types').select('*').order('label');
+    const { data: all } = await mdb('shift_types').select('*').order('sort_order');
     if (all) setShiftTypes(all);
   }
 
@@ -792,90 +798,80 @@ function ShiftMasterSection({ officeId, onClose }) {
     showToast('シフト種別を削除しました');
   }
 
+  function calcWork(t) {
+    if (!t.start_time || !t.end_time) return '—';
+    const [sh, sm2] = t.start_time.slice(0,5).split(':').map(Number);
+    const [eh, em2] = t.end_time.slice(0,5).split(':').map(Number);
+    let startMin = sh * 60 + sm2, endMin = eh * 60 + em2;
+    if (endMin <= startMin) endMin += 24 * 60;
+    const m = endMin - startMin - (t.break_minutes || 0);
+    return `${Math.floor(m / 60)}h ${m % 60}m`;
+  }
+
   return (
-    <div className="card">
-      <div className="page-head" style={{ padding: '12px 16px' }}>
-        <div><h3>シフト種別マスタ</h3><p className="muted small">この事業所のシフト種別を管理します</p></div>
-        <div className="actions">
+    <div className="modal-bg" onClick={onClose}>
+      <div className="modal" style={{ width: 720, maxWidth: '96vw' }} onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <h3>シフト種別マスタ</h3>
+          <button className="x" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body" style={{ padding: 0 }}>
+          <table className="sheet">
+            <thead><tr>
+              <th style={{ width: 32 }}></th>
+              <th className="rownum"></th>
+              <th>名称</th><th>開始</th><th>終了</th>
+              <th>休憩(分)</th><th>実働</th><th>カラー</th><th>操作</th>
+            </tr></thead>
+            <tbody ref={tbodyRef}>
+              {officeTypes.length === 0 && (
+                <tr><td colSpan={9} className="empty">「＋ 追加」から作成してください</td></tr>
+              )}
+              {officeTypes.map((t, i) => (
+                <tr key={t.id} data-id={t.id}>
+                  <td><span className="drag-handle">⠿</span></td>
+                  <td className="rownum">{i + 1}</td>
+                  <td>
+                    <input className="cell-input" defaultValue={t.label}
+                      onBlur={e => updateType(t.id, 'label', e.target.value)} />
+                  </td>
+                  <td>
+                    <input className="cell-input mono" type="time"
+                      value={t.start_time?.slice(0,5) || ''}
+                      onChange={e => updateType(t.id, 'start_time', e.target.value)} />
+                  </td>
+                  <td>
+                    <input className="cell-input mono" type="time"
+                      value={t.end_time?.slice(0,5) || ''}
+                      onChange={e => updateType(t.id, 'end_time', e.target.value)} />
+                  </td>
+                  <td>
+                    <input className="cell-input mono" type="number"
+                      value={t.break_minutes}
+                      onChange={e => updateType(t.id, 'break_minutes', +e.target.value)}
+                      style={{ width: 56 }} />
+                  </td>
+                  <td className="mono" style={{ fontSize: 12 }}>{calcWork(t)}</td>
+                  <td>
+                    <div className="color-cell">
+                      <input type="color" value={t.color}
+                        onChange={e => updateType(t.id, 'color', e.target.value)} />
+                      <span className="mono small">{t.color}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <button className="btn-mini danger" onClick={() => deleteType(t.id)}>削除</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="modal-foot">
           <button className="btn-ghost" onClick={addType}>＋ 追加</button>
-          <button className="btn-ghost" onClick={onClose}>閉じる</button>
+          <button className="btn-primary" onClick={onClose}>閉じる</button>
         </div>
       </div>
-      <table className="sheet">
-        <thead><tr>
-          <th className="rownum"></th><th>名称</th><th>開始</th><th>終了</th>
-          <th>休憩(分)</th><th>所定実働</th><th>カラー</th><th>操作</th>
-        </tr></thead>
-        <tbody>
-          {officeTypes.length === 0 && (
-            <tr><td colSpan={8} className="empty">シフト種別がありません。「＋ 追加」から作成してください</td></tr>
-          )}
-          {officeTypes.map((t, i) => {
-            let work = '—';
-            if (t.start_time && t.end_time) {
-              const [sh, sm2] = t.start_time.slice(0,5).split(':').map(Number);
-              const [eh, em2] = t.end_time.slice(0,5).split(':').map(Number);
-              let startMin = sh * 60 + sm2;
-              let endMin   = eh * 60 + em2;
-              if (endMin <= startMin) endMin += 24 * 60; // 日跨ぎ
-              const m = endMin - startMin - (t.break_minutes || 0);
-              work = `${Math.floor(m / 60)}h ${m % 60}m`;
-            }
-            return (
-              <tr key={t.id}>
-                <td className="rownum">{i + 1}</td>
-                <td>
-                  <input
-                    className="cell-input"
-                    value={localVal(t.id, 'label', t.label)}
-                    onChange={e => handleChange(t.id, 'label', e.target.value)}
-                    onBlur={e => handleBlur(t.id, 'label', e.target.value)}
-                  />
-                </td>
-                <td>
-                  <input
-                    className="cell-input mono"
-                    type="time"
-                    value={t.start_time?.slice(0,5) || ''}
-                    onChange={e => updateType(t.id, 'start_time', e.target.value)}
-                  />
-                </td>
-                <td>
-                  <input
-                    className="cell-input mono"
-                    type="time"
-                    value={t.end_time?.slice(0,5) || ''}
-                    onChange={e => updateType(t.id, 'end_time', e.target.value)}
-                  />
-                </td>
-                <td>
-                  <input
-                    className="cell-input mono"
-                    type="number"
-                    value={t.break_minutes}
-                    onChange={e => updateType(t.id, 'break_minutes', +e.target.value)}
-                    style={{ width: 60 }}
-                  />
-                </td>
-                <td className="mono">{work}</td>
-                <td>
-                  <div className="color-cell">
-                    <input
-                      type="color"
-                      value={t.color}
-                      onChange={e => updateType(t.id, 'color', e.target.value)}
-                    />
-                    <span className="mono small">{t.color}</span>
-                  </div>
-                </td>
-                <td>
-                  <button className="btn-mini danger" onClick={() => deleteType(t.id)}>削除</button>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
     </div>
   );
 }

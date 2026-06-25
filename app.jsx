@@ -49,7 +49,7 @@ function AppProvider({ children }) {
       const [offRes, stRes, stypeRes, alertRes, posRes] = await Promise.all([
         mdb('offices').select('*').order('sort_order').order('name'),
         mdb('staff').select('*').eq('is_active', true).order('sort_order').order('name'),
-        mdb('shift_types').select('*').order('label'),
+        mdb('shift_types').select('*').order('sort_order').order('label'),
         mdb('alerts')
           .select('*, staff(name), offices(name), requests(type, date, reason)')
           .order('created_at', { ascending: false }),
