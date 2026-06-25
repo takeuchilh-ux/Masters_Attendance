@@ -984,7 +984,7 @@ function StaffDetailModal({ staff: s, offices, onClose, onEdit }) {
   );
 }
 
-function StaffEditModal({ staff: s, offices, positionTypes = [], setPositionTypes, onClose, onSave }) {
+function StaffEditModal({ staff: s, offices, positionTypes: ptProp = [], setPositionTypes, onClose, onSave }) {
   const parts = (s.name || '').split(/\s+/);
   const [form, setForm] = useStateA({
     id:             s.id,
@@ -997,7 +997,17 @@ function StaffEditModal({ staff: s, offices, positionTypes = [], setPositionType
     position:       s.position       || '',
     duty_category:  s.duty_category  || '',
   });
-  const [newPos, setNewPos] = useStateA('');
+  const [newPos,       setNewPos]       = useStateA('');
+  const [positionTypes, setLocalPT]    = useStateA(ptProp);
+
+  useEffectA(() => {
+    mdb('position_types').select('*').order('sort_order').then(({ data }) => {
+      if (data && data.length > 0) {
+        setLocalPT(data);
+        if (setPositionTypes) setPositionTypes(data);
+      }
+    });
+  }, []);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const fullName = () => [form.last_name.trim(), form.first_name.trim()].filter(Boolean).join(' ');
 
