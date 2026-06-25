@@ -530,7 +530,9 @@ function MonthlyDetailTable({ sShifts, sTouches, sRequests, shiftTypesDB }) {
     if (start && end) {
       const [sh_, sm_] = start.split(':').map(Number);
       const [eh_, em_] = end.split(':').map(Number);
-      workMin = (eh_ * 60 + em_) - (sh_ * 60 + sm_) - (st?.break_minutes || 0);
+      let sMin = sh_ * 60 + sm_, eMin = eh_ * 60 + em_;
+      if (eMin <= sMin) eMin += 24 * 60;
+      workMin = eMin - sMin - (st?.break_minutes || 0);
     }
 
     return { date: sh.date, dow, label: st?.label || '—', color: st?.color, start, end, workMin, touchInTime, touchOutTime, reqs };
@@ -672,7 +674,9 @@ function MonthlyPage() {
         if (s2 && e2) {
           const [sh_, sm_] = s2.split(':').map(Number);
           const [eh_, em_] = e2.split(':').map(Number);
-          totalShiftMin += (eh_ * 60 + em_) - (sh_ * 60 + sm_) - (st.break_minutes || 0);
+          let sMin2 = sh_ * 60 + sm_, eMin2 = eh_ * 60 + em_;
+          if (eMin2 <= sMin2) eMin2 += 24 * 60;
+          totalShiftMin += eMin2 - sMin2 - (st.break_minutes || 0);
         }
       });
 
