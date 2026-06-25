@@ -1070,6 +1070,9 @@ function StaffEditModal({ staff: s, offices, positionTypes = [], setPositionType
               <select value={form.position} onChange={e => set('position', e.target.value)}>
                 <option value="">— 未設定 —</option>
                 {positionTypes.map(p => <option key={p.id} value={p.label}>{p.label}</option>)}
+                {form.position && !positionTypes.find(p => p.label === form.position) && (
+                  <option value={form.position}>{form.position}</option>
+                )}
               </select>
             </label>
           </div>
