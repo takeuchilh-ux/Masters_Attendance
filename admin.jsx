@@ -787,7 +787,7 @@ function MonthlyPage() {
 // StaffAdminPage - スタッフ管理
 // ============================================================
 function StaffAdminPage() {
-  const { offices, staff, setStaff, showToast } = useContextA(AppCtx);
+  const { offices, staff, setStaff, showToast, positionTypes, setPositionTypes } = useContextA(AppCtx);
   const [officeFilter, setOfficeFilter] = useStateA('all');
   const [q,            setQ]            = useStateA('');
   const [editing,      setEditing]      = useStateA(null);
@@ -815,6 +815,7 @@ function StaffAdminPage() {
       role:       form.role       || 'staff',
       birth_mmdd: form.birth_mmdd || null,
       email:      form.email      || null,
+      position:   form.position   || null,
     };
 
     if (form.id) {
@@ -884,11 +885,11 @@ function StaffAdminPage() {
 
         <table className="sheet">
           <thead><tr>
-            <th style={{width:32}}></th><th className="rownum"></th><th>氏名</th><th>事業所</th><th>権限</th>
+            <th style={{width:32}}></th><th className="rownum"></th><th>氏名</th><th>役職</th><th>事業所</th><th>権限</th>
             <th>生年月日</th><th>登録日</th><th>操作</th>
           </tr></thead>
           <tbody ref={tbodyRef}>
-            {filtered.length === 0 && <tr><td colSpan={8} className="empty">スタッフがいません</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={9} className="empty">スタッフがいません</td></tr>}
             {filtered.map((s, i) => {
               const office = offices.find(o => o.id === s.office_id);
               return (
@@ -901,6 +902,7 @@ function StaffAdminPage() {
                       <strong style={{ textDecoration: 'underline', color: 'var(--primary)' }}>{s.name}</strong>
                     </div>
                   </td>
+                  <td style={{ fontSize:12 }}>{s.position || <span className="muted">—</span>}</td>
                   <td>{office?.name || '—'}</td>
                   <td><span className={`pill ${roleColor(s.role)}`}>{ROLE_LABELS[s.role] || s.role}</span></td>
                   <td className="mono">{s.birth_mmdd || <span className="muted">未登録</span>}</td>
@@ -921,6 +923,8 @@ function StaffAdminPage() {
         <StaffEditModal
           staff={editing}
           offices={offices}
+          positionTypes={positionTypes}
+          setPositionTypes={setPositionTypes}
           onClose={() => setEditing(null)}
           onSave={saveStaff}
         />
@@ -974,8 +978,7 @@ function StaffDetailModal({ staff: s, offices, onClose, onEdit }) {
   );
 }
 
-function StaffEditModal({ staff: s, offices, onClose, onSave }) {
-  // 既存データは "姓 名" or "姓名" のどちらでも対応
+function StaffEditModal({ staff: s, offices, positionTypes = [], setPositionTypes, onClose, onSave }) {
   const parts = (s.name || '').split(/\s+/);
   const [form, setForm] = useStateA({
     id:          s.id,
@@ -985,13 +988,27 @@ function StaffEditModal({ staff: s, offices, onClose, onSave }) {
     role:        s.role        || 'staff',
     birth_mmdd:  s.birth_mmdd  || '',
     email:       s.email       || '',
+    position:    s.position    || '',
   });
+  const [newPos, setNewPos] = useStateA('');
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const fullName = () => [form.last_name.trim(), form.first_name.trim()].filter(Boolean).join(' ');
 
+  async function addPositionType() {
+    const label = newPos.trim();
+    if (!label) return;
+    const { data } = await mdb('position_types').insert({ label, sort_order: (positionTypes.length + 1) * 10 }).select().single();
+    if (data && setPositionTypes) setPositionTypes(prev => [...prev, data]);
+    setNewPos('');
+  }
+  async function deletePositionType(id) {
+    await mdb('position_types').delete().eq('id', id);
+    if (setPositionTypes) setPositionTypes(prev => prev.filter(p => p.id !== id));
+  }
+
   return (
     <div className="modal-bg" onClick={onClose}>
-      <div className="modal" style={{ width: 480 }} onClick={e => e.stopPropagation()}>
+      <div className="modal" style={{ width: 520 }} onClick={e => e.stopPropagation()}>
         <div className="modal-head">
           <h3>{s.id ? 'スタッフ編集' : 'スタッフ登録'}</h3>
           <button className="x" onClick={onClose}>×</button>
@@ -1031,6 +1048,34 @@ function StaffEditModal({ staff: s, offices, onClose, onSave }) {
               <input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="任意" />
             </label>
           </div>
+          <label className="field">
+            <span>役職</span>
+            <input list="position-list" value={form.position}
+              onChange={e => set('position', e.target.value)}
+              placeholder="役職を入力または選択" />
+            <datalist id="position-list">
+              {positionTypes.map(p => <option key={p.id} value={p.label} />)}
+            </datalist>
+          </label>
+          <details style={{ marginTop:8 }}>
+            <summary style={{ fontSize:12, color:'var(--muted)', cursor:'pointer', userSelect:'none' }}>役職マスタを編集</summary>
+            <div style={{ background:'#f8fafc', borderRadius:8, padding:'10px 12px', marginTop:6 }}>
+              <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:8 }}>
+                {positionTypes.map(p => (
+                  <span key={p.id} style={{ display:'inline-flex', alignItems:'center', gap:4, background:'#e2e8f0', borderRadius:6, padding:'2px 8px', fontSize:12 }}>
+                    {p.label}
+                    <button onClick={() => deletePositionType(p.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:12, padding:0, lineHeight:1 }}>✕</button>
+                  </span>
+                ))}
+              </div>
+              <div style={{ display:'flex', gap:6 }}>
+                <input value={newPos} onChange={e => setNewPos(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addPositionType()}
+                  placeholder="新しい役職名" style={{ flex:1, border:'1px solid #d1d5db', borderRadius:6, padding:'4px 8px', fontSize:13 }} />
+                <button className="btn-mini" onClick={addPositionType}>追加</button>
+              </div>
+            </div>
+          </details>
         </div>
         <div className="modal-foot">
           <button className="btn-ghost" onClick={onClose}>キャンセル</button>

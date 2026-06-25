@@ -36,27 +36,30 @@ const STATUS_LABELS = {
 const AppCtx = createContext(null);
 
 function AppProvider({ children }) {
-  const [offices,    setOffices]    = useState([]);
-  const [staff,      setStaff]      = useState([]);
-  const [shiftTypes, setShiftTypes] = useState([]);
-  const [alerts,     setAlerts]     = useState([]);
-  const [dbStatus,   setDbStatus]   = useState('loading');
-  const [toast,      setToast]      = useState(null);
+  const [offices,       setOffices]       = useState([]);
+  const [staff,         setStaff]         = useState([]);
+  const [shiftTypes,    setShiftTypes]    = useState([]);
+  const [alerts,        setAlerts]        = useState([]);
+  const [positionTypes, setPositionTypes] = useState([]);
+  const [dbStatus,      setDbStatus]      = useState('loading');
+  const [toast,         setToast]         = useState(null);
 
   async function loadMaster() {
     try {
-      const [offRes, stRes, stypeRes, alertRes] = await Promise.all([
+      const [offRes, stRes, stypeRes, alertRes, posRes] = await Promise.all([
         mdb('offices').select('*').order('sort_order').order('name'),
         mdb('staff').select('*').eq('is_active', true).order('sort_order').order('name'),
         mdb('shift_types').select('*').order('label'),
         mdb('alerts')
           .select('*, staff(name), offices(name), requests(type, date, reason)')
           .order('created_at', { ascending: false }),
+        mdb('position_types').select('*').order('sort_order'),
       ]);
       if (offRes.data)   setOffices(offRes.data);
       if (stRes.data)    setStaff(stRes.data);
       if (stypeRes.data) setShiftTypes(stypeRes.data);
       if (alertRes.data) setAlerts(alertRes.data);
+      if (posRes.data)   setPositionTypes(posRes.data);
       setDbStatus('ok');
     } catch (e) {
       console.error(e);
@@ -77,6 +80,7 @@ function AppProvider({ children }) {
     <AppCtx.Provider value={{
       offices, setOffices, staff, setStaff,
       shiftTypes, setShiftTypes, alerts, setAlerts,
+      positionTypes, setPositionTypes,
       unreadAlerts, dbStatus, showToast, reload: loadMaster, mdb,
     }}>
       {children}

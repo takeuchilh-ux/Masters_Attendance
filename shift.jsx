@@ -45,6 +45,18 @@ function ShiftPage({ auth }) {
   const [editing, setEditing] = useStateS(null);
   const [loadingShifts, setLoadingShifts] = useStateS(false);
   const [masterOpen, setMasterOpen] = useStateS(false);
+  const [duties, setDuties] = useStateS({}); // key: officeId|date|dutyType → staffId
+  const [dutyEditing, setDutyEditing] = useStateS(null); // { officeId, date, dutyType }
+
+  // 11日〜翌月10日の期間計算
+  const periodStart = useMemoS(() => {
+    return `${year}-${String(month).padStart(2,'0')}-11`;
+  }, [year, month]);
+  const periodEnd = useMemoS(() => {
+    const nm = month === 12 ? 1  : month + 1;
+    const ny = month === 12 ? year + 1 : year;
+    return `${ny}-${String(nm).padStart(2,'0')}-10`;
+  }, [year, month]);
 
   // 事業所リストが読み込まれたら（officeIdが空の場合のみ）最初の事業所を選択
   useEffectS(() => {
@@ -65,32 +77,32 @@ function ShiftPage({ auth }) {
     }
   }, [officeId]);
 
-  // 選択事業所・月のシフトを取得
+  // 選択期間（11日〜翌月10日）のシフトと日直割り当てを取得
   useEffectS(() => {
     if (!officeId) return;
     setLoadingShifts(true);
-    const monthStr  = `${year}-${String(month).padStart(2,'0')}`;
-    const monthEnd  = localISO(new Date(year, month, 0));
-    mdb('shifts')
-      .select('*')
-      .gte('date', `${monthStr}-01`)
-      .lte('date', monthEnd)
-      .then(({ data }) => {
-        const map = {};
-        (data || []).forEach(s => {
-          map[`${s.staff_id}|${s.date}`] = {
-            typeId:   s.shift_type_id,
-            override: (s.override_start || s.override_end)
-              ? { start: fmtTime(s.override_start), end: fmtTime(s.override_end) }
-              : null,
-            notes: s.notes || '',
-            dbId: s.id,
-          };
-        });
-        setShifts(map);
-        setLoadingShifts(false);
+    Promise.all([
+      mdb('shifts').select('*').gte('date', periodStart).lte('date', periodEnd),
+      mdb('duty_assignments').select('*').gte('date', periodStart).lte('date', periodEnd),
+    ]).then(([sRes, dRes]) => {
+      const map = {};
+      (sRes.data || []).forEach(s => {
+        map[`${s.staff_id}|${s.date}`] = {
+          typeId:   s.shift_type_id,
+          override: (s.override_start || s.override_end)
+            ? { start: fmtTime(s.override_start), end: fmtTime(s.override_end) }
+            : null,
+          notes: s.notes || '',
+          dbId: s.id,
+        };
       });
-  }, [officeId, year, month]);
+      setShifts(map);
+      const dmap = {};
+      (dRes.data || []).forEach(d => { dmap[`${d.office_id}|${d.date}|${d.duty_type}`] = { staffId: d.staff_id, dbId: d.id }; });
+      setDuties(dmap);
+      setLoadingShifts(false);
+    });
+  }, [officeId, year, month, periodStart, periodEnd]);
 
   // 事業所のシフト種別
   const shiftMaster = useMemoS(() =>
@@ -98,13 +110,19 @@ function ShiftPage({ auth }) {
     [allShiftTypes, officeId]
   );
 
-  // 日付配列
+  // 日付配列（11日〜翌月10日）
   const days = useMemoS(() => {
-    const dim = new Date(year, month, 0).getDate();
-    return Array.from({ length: dim }, (_, i) => {
-      const d = new Date(year, month - 1, i + 1);
-      return { d, n: i + 1, dow: d.getDay(), iso: localISO(d) };
-    });
+    const result = [];
+    const start = new Date(year, month - 1, 11);
+    const nm = month === 12 ? 1 : month + 1;
+    const ny = month === 12 ? year + 1 : year;
+    const end = new Date(ny, nm - 1, 10);
+    const cur = new Date(start);
+    while (cur <= end) {
+      result.push({ d: new Date(cur), n: cur.getDate(), dow: cur.getDay(), iso: localISO(cur) });
+      cur.setDate(cur.getDate() + 1);
+    }
+    return result;
   }, [year, month]);
 
   async function saveShift(staffId, iso, typeId, override, notes) {
@@ -138,6 +156,24 @@ function ShiftPage({ auth }) {
     }
   }
 
+  // 日直/準夜/夜勤 保存
+  async function saveDuty(offId, iso, dutyType, staffId) {
+    const key = `${offId}|${iso}|${dutyType}`;
+    const existing = duties[key];
+    if (!staffId) {
+      if (existing?.dbId) await mdb('duty_assignments').delete().eq('id', existing.dbId);
+      setDuties(d => { const n = { ...d }; delete n[key]; return n; });
+      return;
+    }
+    if (existing?.dbId) {
+      await mdb('duty_assignments').update({ staff_id: staffId }).eq('id', existing.dbId);
+      setDuties(d => ({ ...d, [key]: { staffId, dbId: existing.dbId } }));
+    } else {
+      const { data } = await mdb('duty_assignments').insert({ office_id: offId, date: iso, duty_type: dutyType, staff_id: staffId }).select().single();
+      setDuties(d => ({ ...d, [key]: { staffId, dbId: data?.id } }));
+    }
+  }
+
   // PDF印刷
   function printPDF() {
     const tname = offices.find(o => o.id === officeId)?.name || '';
@@ -167,7 +203,12 @@ function ShiftPage({ auth }) {
             <button className="btn-icon" onClick={() => {
               if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1);
             }}>◀</button>
-            <strong>{year}年 {month}月</strong>
+            <div style={{ textAlign:'center' }}>
+              <strong>{year}年 {month}月</strong>
+              <div style={{ fontSize:10, color:'var(--muted)', lineHeight:1.2 }}>
+                {periodStart.slice(5).replace('-','/')}〜{periodEnd.slice(5).replace('-','/')}
+              </div>
+            </div>
             <button className="btn-icon" onClick={() => {
               if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1);
             }}>▶</button>
@@ -218,7 +259,12 @@ function ShiftPage({ auth }) {
             master={shiftMaster}
             shifts={shifts}
             days={days}
+            duties={duties}
+            showDuty={officeId !== FUJISAWA_OFFICE_ID_SHIFT}
+            dutyOfficeId={officeId}
             onCellClick={(staffId, iso, staffOfficeId) => setEditing({ staffId, date: iso, officeId: staffOfficeId })}
+            onDutyClick={(offId, iso, dutyType) => setDutyEditing({ officeId: offId, date: iso, dutyType })}
+            allStaff={officeStaff}
           />
         )}
 
@@ -238,7 +284,12 @@ function ShiftPage({ auth }) {
                   master={masterForOffice}
                   shifts={shifts}
                   days={days}
+                  duties={duties}
+                  showDuty={office.id !== FUJISAWA_OFFICE_ID_SHIFT}
+                  dutyOfficeId={office.id}
                   onCellClick={(staffId, iso, staffOfficeId) => setEditing({ staffId, date: iso, officeId: staffOfficeId })}
+                  onDutyClick={(offId, iso, dutyType) => setDutyEditing({ officeId: offId, date: iso, dutyType })}
+                  allStaff={staffForOffice}
                 />
               </div>
             );
@@ -286,6 +337,22 @@ function ShiftPage({ auth }) {
         />
       )}
 
+      {dutyEditing && (
+        <DutyEditModal
+          dutyType={dutyEditing.dutyType}
+          date={dutyEditing.date}
+          officeId={dutyEditing.officeId}
+          staff={officeStaff.filter(s => s.office_id === dutyEditing.officeId)}
+          currentStaffId={duties[`${dutyEditing.officeId}|${dutyEditing.date}|${dutyEditing.dutyType}`]?.staffId || ''}
+          onClose={() => setDutyEditing(null)}
+          onSave={async (staffId) => {
+            await saveDuty(dutyEditing.officeId, dutyEditing.date, dutyEditing.dutyType, staffId);
+            showToast(`${dutyEditing.dutyType}を更新しました`);
+            setDutyEditing(null);
+          }}
+        />
+      )}
+
       {/* シフトマスタ管理（種別編集ボタンはツールバーに配置） */}
       {officeId && officeId !== 'ALL' && masterOpen && (
         <ShiftMasterSection officeId={officeId} onClose={() => setMasterOpen(false)} />
@@ -294,10 +361,13 @@ function ShiftPage({ auth }) {
   );
 }
 
+const FUJISAWA_OFFICE_ID_SHIFT = '416ff2a2-76f6-4087-b1de-86e1412dfd0b';
+const DUTY_TYPES = ['日直', '準夜', '夜勤'];
+
 // ============================================================
 // ShiftMonthMatrix - 月次シフト表（単一事業所）
 // ============================================================
-function ShiftMonthMatrix({ staff, master, shifts, days, onCellClick }) {
+function ShiftMonthMatrix({ staff, master, shifts, days, duties, showDuty, dutyOfficeId, onCellClick, onDutyClick, allStaff }) {
   return (
     <div className="shift-matrix-wrap">
       <table className="shift-matrix">
@@ -362,6 +432,35 @@ function ShiftMonthMatrix({ staff, master, shifts, days, onCellClick }) {
               </tr>
             );
           })}
+          {showDuty && DUTY_TYPES.map(dtype => (
+            <tr key={dtype} style={{ background:'#f0f4ff' }}>
+              <td className="sticky-l" style={{ background:'#e8eeff' }}>
+                <div className="row-name" style={{ paddingLeft:4 }}>
+                  <span style={{ fontSize:10, fontWeight:700, color:'#3b5bdb', background:'#dde3ff', borderRadius:4, padding:'1px 6px', whiteSpace:'nowrap' }}>{dtype}</span>
+                </div>
+              </td>
+              {days.map(d => {
+                const key = `${dutyOfficeId}|${d.iso}|${dtype}`;
+                const duty = duties?.[key];
+                const assignee = duty?.staffId ? (allStaff || []).find(s => s.id === duty.staffId) : null;
+                return (
+                  <td
+                    key={d.iso}
+                    className={`shift-cell ${d.dow === 0 ? 'sun' : d.dow === 6 ? 'sat' : ''}`}
+                    style={{ cursor:'pointer', background: assignee ? '#dde3ff' : undefined }}
+                    onClick={() => onDutyClick(dutyOfficeId, d.iso, dtype)}
+                  >
+                    {assignee && (
+                      <div style={{ fontSize:9, fontWeight:700, color:'#1e40af', lineHeight:1.2, padding:'1px 0', textAlign:'center', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                        {assignee.name.replace(/\s+/g,'').slice(0,4)}
+                      </div>
+                    )}
+                  </td>
+                );
+              })}
+              <td className="total"></td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
@@ -732,6 +831,37 @@ function ShiftMasterSection({ officeId, onClose }) {
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// ============================================================
+// DutyEditModal - 日直/準夜/夜勤 担当者選択
+// ============================================================
+function DutyEditModal({ dutyType, date, officeId, staff, currentStaffId, onClose, onSave }) {
+  const [sel, setSel] = useStateS(currentStaffId || '');
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="modal" style={{ width: 320 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <h3>{dutyType} 担当者</h3>
+          <button className="x" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          <div className="muted" style={{ marginBottom:10, fontSize:13 }}>{date}</div>
+          <label className="field">
+            <span>担当スタッフ</span>
+            <select value={sel} onChange={e => setSel(e.target.value)}>
+              <option value="">— なし —</option>
+              {staff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </label>
+        </div>
+        <div className="modal-foot">
+          <button className="btn-ghost" onClick={onClose}>キャンセル</button>
+          <button className="btn-primary" onClick={() => onSave(sel || null)}>保存</button>
+        </div>
+      </div>
     </div>
   );
 }
