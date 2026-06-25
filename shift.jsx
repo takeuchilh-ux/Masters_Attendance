@@ -373,88 +373,129 @@ function ShiftSectionHeader({ label, color, bg, days }) {
 }
 
 function ShiftMonthMatrix({ staff, master, shifts, days, duties, showDuty, dutyOfficeId, onCellClick, onDutyClick, allStaff }) {
-  // duty_category による分割: 日直グループ / 当直グループ / 未設定
   const sortByPos = (arr) => [...arr].sort((a, b) => posOrder(a.position) - posOrder(b.position));
   const hasCategories = staff.some(s => s.duty_category);
-  const nikkiStaff  = hasCategories ? sortByPos(staff.filter(s => s.duty_category === '日直' || s.duty_category === '両方')) : [];
-  const tochiStaff  = hasCategories ? sortByPos(staff.filter(s => s.duty_category === '当直' || s.duty_category === '両方')) : [];
-  const otherStaff  = hasCategories ? sortByPos(staff.filter(s => !s.duty_category)) : sortByPos(staff);
+  const nikkiStaff = hasCategories ? sortByPos(staff.filter(s => s.duty_category === '日直' || s.duty_category === '両方')) : [];
+  const tochiStaff = hasCategories ? sortByPos(staff.filter(s => s.duty_category === '当直' || s.duty_category === '両方')) : [];
+  const otherStaff = hasCategories ? sortByPos(staff.filter(s => !s.duty_category)) : sortByPos(staff);
 
-  const renderStaffRow = (s) => {
-    let totalH = 0, kyukeiCnt = 0, yukyuCnt = 0, kyuCnt = 0;
-    const cells = days.map(d => {
-      const sh  = shifts[`${s.id}|${d.iso}`];
-      const sm  = sh ? master.find(x => x.id === sh.typeId) : null;
-      const start = fmtTime(sh?.override?.start || sm?.start_time);
-      const end   = fmtTime(sh?.override?.end   || sm?.end_time);
-      if (start && end) {
-        const [ih, im] = start.split(':').map(Number);
-        const [oh, om] = end.split(':').map(Number);
-        let sMin = ih * 60 + im, eMin = oh * 60 + om;
-        if (eMin <= sMin) eMin += 24 * 60;
-        totalH += (eMin - sMin - (sm?.break_minutes || 60)) / 60;
-      }
-      if (sm?.label === '公休') kyukeiCnt++;
-      if (sm?.label === '有給') yukyuCnt++;
-      if (sm?.label === '休')   kyuCnt++;
-      return (
-        <td key={d.n} className={`shift-cell ${d.dow === 0 ? 'sun' : d.dow === 6 ? 'sat' : ''}`}
-          onClick={() => onCellClick(s.id, d.iso, s.office_id)}>
-          {sm && (
-            <div className="cell-shift" style={{ background: sm.color }}>
-              <div className="lbl">{sm.label}</div>
-              {start && <div className="time mono">{fmtShort(start)}〜{fmtShort(end)}</div>}
-              {sh?.notes && <div className="lbl" style={{ fontSize:9, opacity:.8, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:'100%' }}>{sh.notes.length > 6 ? sh.notes.slice(0,6)+'…' : sh.notes}</div>}
-            </div>
-          )}
-        </td>
-      );
+  // sticky 左位置
+  const secW  = hasCategories ? 36 : 0;
+  const roleW = 52;
+  const nameW = 80;
+
+  const groupByPos = (arr) => {
+    const groups = [], map = {};
+    arr.forEach(s => {
+      const p = s.position || '';
+      if (!map[p]) { map[p] = []; groups.push({ pos: p, members: map[p] }); }
+      map[p].push(s);
     });
-    return (
-      <tr key={s.id}>
-        <td className="sticky-l">
-          <div style={{ display:'flex', flexDirection:'column', gap:1, minWidth:0, overflow:'hidden' }}>
-            <div style={{ fontSize:11, fontWeight:700, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', lineHeight:1.3 }}>{s.name.replace(/\s+/g,'')}</div>
-            {s.position && <div style={{ fontSize:9, color:'#64748b', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', lineHeight:1.2 }}>{s.position}</div>}
-          </div>
-        </td>
-        {cells}
-        <td className="total" style={{ fontSize:11, lineHeight:1.6 }}>
-          <strong className="mono">{Math.round(totalH)}h</strong>
-          {kyukeiCnt > 0 && <div style={{ color:'#ef4444' }}>公休{kyukeiCnt}</div>}
-          {yukyuCnt  > 0 && <div style={{ color:'#16a34a' }}>有給{yukyuCnt}</div>}
-          {kyuCnt    > 0 && <div style={{ color:'#dc2626' }}>休{kyuCnt}</div>}
-        </td>
-      </tr>
-    );
+    return groups;
   };
 
-  const renderGroupRows = (arr) => {
+  const renderSection = (label, color, bg, arr, showSec) => {
+    if (!arr.length) return null;
+    const groups = groupByPos(arr);
+    const totalRows = arr.length;
     const rows = [];
-    let lastPos = undefined;
-    arr.forEach(s => {
-      const pos = s.position || '';
-      if (lastPos !== undefined && pos !== lastPos) {
+    let secDone = false;
+
+    groups.forEach(({ pos, members }) => {
+      members.forEach((s, mi) => {
+        let totalH = 0, kyukeiCnt = 0, yukyuCnt = 0, kyuCnt = 0;
+        const cells = days.map(d => {
+          const sh  = shifts[`${s.id}|${d.iso}`];
+          const sm  = sh ? master.find(x => x.id === sh.typeId) : null;
+          const start = fmtTime(sh?.override?.start || sm?.start_time);
+          const end   = fmtTime(sh?.override?.end   || sm?.end_time);
+          if (start && end) {
+            const [ih,im] = start.split(':').map(Number);
+            const [oh,om] = end.split(':').map(Number);
+            let sMin = ih*60+im, eMin = oh*60+om;
+            if (eMin <= sMin) eMin += 24*60;
+            totalH += (eMin - sMin - (sm?.break_minutes||60)) / 60;
+          }
+          if (sm?.label === '公休') kyukeiCnt++;
+          if (sm?.label === '有給') yukyuCnt++;
+          if (sm?.label === '休')   kyuCnt++;
+          return (
+            <td key={d.n} className={`shift-cell ${d.dow===0?'sun':d.dow===6?'sat':''}`}
+              onClick={() => onCellClick(s.id, d.iso, s.office_id)}>
+              {sm && (
+                <div className="cell-shift" style={{ background: sm.color }}>
+                  <div className="lbl">{sm.label}</div>
+                  {start && <div className="time mono">{fmtShort(start)}〜{fmtShort(end)}</div>}
+                  {sh?.notes && <div className="lbl" style={{ fontSize:9, opacity:.8, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>{sh.notes.length>6?sh.notes.slice(0,6)+'…':sh.notes}</div>}
+                </div>
+              )}
+            </td>
+          );
+        });
+
+        const isFirstSec = showSec && !secDone && mi === 0;
+        if (isFirstSec) secDone = true;
+
         rows.push(
-          <tr key={`sep-${s.id}`} style={{ height:2 }}>
-            <td colSpan={days.length + 2} style={{ padding:0, background:'#e2e8f0' }} />
+          <tr key={s.id}>
+            {isFirstSec && (
+              <td rowSpan={totalRows} style={{
+                position:'sticky', left:0, zIndex:1,
+                width:secW, minWidth:secW,
+                background: bg, color,
+                writingMode:'vertical-rl', textOrientation:'mixed',
+                letterSpacing:1, fontSize:11, fontWeight:700,
+                textAlign:'center', verticalAlign:'middle',
+                borderRight:`2px solid ${color}`,
+                padding:2,
+              }}>{label}</td>
+            )}
+            {mi === 0 && (
+              <td rowSpan={members.length} style={{
+                position:'sticky', left:secW, zIndex:1,
+                width:roleW, minWidth:roleW,
+                background:'#f8fafc',
+                fontSize:10, textAlign:'center', verticalAlign:'middle',
+                wordBreak:'break-all', lineHeight:1.3,
+                padding:'2px 3px',
+                borderRight:'1px solid var(--line)',
+              }}>{pos}</td>
+            )}
+            <td style={{
+              position:'sticky', left:secW+roleW, zIndex:1,
+              minWidth:nameW, maxWidth:nameW+20,
+              background:'#fff',
+              borderRight:'2px solid var(--line-strong)',
+              padding:'2px 5px', verticalAlign:'middle',
+            }}>
+              <div style={{ fontSize:11, fontWeight:700, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', lineHeight:1.4 }}>{s.name.replace(/\s+/g,'')}</div>
+            </td>
+            {cells}
+            <td className="total" style={{ fontSize:11, lineHeight:1.6 }}>
+              <strong className="mono">{Math.round(totalH)}h</strong>
+              {kyukeiCnt > 0 && <div style={{ color:'#ef4444' }}>公休{kyukeiCnt}</div>}
+              {yukyuCnt  > 0 && <div style={{ color:'#16a34a' }}>有給{yukyuCnt}</div>}
+              {kyuCnt    > 0 && <div style={{ color:'#dc2626' }}>休{kyuCnt}</div>}
+            </td>
           </tr>
         );
-      }
-      lastPos = pos;
-      rows.push(renderStaffRow(s));
+      });
     });
     return rows;
   };
+
+  const numLeftCols = hasCategories ? 3 : 2;
 
   return (
     <div className="shift-matrix-wrap">
       <table className="shift-matrix">
         <thead>
           <tr>
-            <th className="sticky-l">スタッフ</th>
+            {hasCategories && <th style={{ position:'sticky', left:0, zIndex:3, background:'#f8fafc', width:secW, minWidth:secW, padding:'2px', textAlign:'center', borderRight:'1px solid var(--line)' }}>区分</th>}
+            <th style={{ position:'sticky', left:secW, zIndex:3, background:'#f8fafc', width:roleW, minWidth:roleW, padding:'2px 3px', textAlign:'center', borderRight:'1px solid var(--line)', fontSize:11 }}>役割</th>
+            <th style={{ position:'sticky', left:secW+roleW, zIndex:3, background:'#f8fafc', minWidth:nameW, padding:'2px 5px', borderRight:'2px solid var(--line-strong)', fontSize:11 }}>名前</th>
             {days.map(d => (
-              <th key={d.n} className={`day-h ${d.dow === 0 ? 'sun' : d.dow === 6 ? 'sat' : ''}`}>
+              <th key={d.n} className={`day-h ${d.dow===0?'sun':d.dow===6?'sat':''}`}>
                 <div className="dn">{d.n}</div>
                 <div className="dw">{['日','月','火','水','木','金','土'][d.dow]}</div>
               </th>
@@ -465,40 +506,26 @@ function ShiftMonthMatrix({ staff, master, shifts, days, duties, showDuty, dutyO
         <tbody>
           {hasCategories ? (
             <>
-              {nikkiStaff.length > 0 && <>
-                <ShiftSectionHeader label="日直" color="#1d4ed8" bg="#dbeafe" days={days} />
-                {renderGroupRows(nikkiStaff)}
-              </>}
-              {tochiStaff.length > 0 && <>
-                <ShiftSectionHeader label="当直" color="#be185d" bg="#fce7f3" days={days} />
-                {renderGroupRows(tochiStaff)}
-              </>}
-              {otherStaff.length > 0 && <>
-                <ShiftSectionHeader label="その他" color="#6b7280" bg="#f3f4f6" days={days} />
-                {renderGroupRows(otherStaff)}
-              </>}
+              {renderSection('日直', '#1d4ed8', '#dbeafe', nikkiStaff, true)}
+              {renderSection('当直', '#be185d', '#fce7f3', tochiStaff, true)}
+              {otherStaff.length > 0 && renderSection('その他', '#6b7280', '#f3f4f6', otherStaff, true)}
             </>
           ) : (
-            renderGroupRows(otherStaff)
+            renderSection('', '', '', otherStaff, false)
           )}
           {showDuty && DUTY_TYPES.map(dtype => (
             <tr key={dtype} style={{ background:'#f0f4ff' }}>
-              <td className="sticky-l" style={{ background:'#e8eeff' }}>
-                <div className="row-name" style={{ paddingLeft:4 }}>
-                  <span style={{ fontSize:10, fontWeight:700, color:'#3b5bdb', background:'#dde3ff', borderRadius:4, padding:'1px 6px', whiteSpace:'nowrap' }}>{dtype}</span>
-                </div>
+              <td colSpan={numLeftCols} style={{ position:'sticky', left:0, zIndex:1, background:'#e8eeff', borderRight:'2px solid var(--line-strong)', padding:'2px 6px' }}>
+                <span style={{ fontSize:10, fontWeight:700, color:'#3b5bdb', background:'#dde3ff', borderRadius:4, padding:'1px 6px', whiteSpace:'nowrap' }}>{dtype}</span>
               </td>
               {days.map(d => {
                 const key = `${dutyOfficeId}|${d.iso}|${dtype}`;
                 const duty = duties?.[key];
-                const assignee = duty?.staffId ? (allStaff || []).find(s => s.id === duty.staffId) : null;
+                const assignee = duty?.staffId ? (allStaff||[]).find(s => s.id === duty.staffId) : null;
                 return (
-                  <td
-                    key={d.iso}
-                    className={`shift-cell ${d.dow === 0 ? 'sun' : d.dow === 6 ? 'sat' : ''}`}
+                  <td key={d.iso} className={`shift-cell ${d.dow===0?'sun':d.dow===6?'sat':''}`}
                     style={{ cursor:'pointer', background: assignee ? '#dde3ff' : undefined }}
-                    onClick={() => onDutyClick(dutyOfficeId, d.iso, dtype)}
-                  >
+                    onClick={() => onDutyClick(dutyOfficeId, d.iso, dtype)}>
                     {assignee && (
                       <div style={{ fontSize:9, fontWeight:700, color:'#1e40af', lineHeight:1.2, padding:'1px 0', textAlign:'center', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                         {assignee.name.replace(/\s+/g,'').slice(0,4)}
