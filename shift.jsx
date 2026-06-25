@@ -771,8 +771,11 @@ function ShiftMasterSection({ officeId, onClose }) {
       break_minutes: 60,
       color:         '#bfdbfe',
     };
-    const { data } = await mdb('shift_types').insert(newType).select().single();
-    if (data) setShiftTypes(ts => [...ts, data]);
+    const { error } = await mdb('shift_types').insert(newType);
+    if (error) { showToast('追加失敗: ' + error.message, 'error'); return; }
+    // insertの後、全件再取得してstateを確実に同期
+    const { data: all } = await mdb('shift_types').select('*').order('label');
+    if (all) setShiftTypes(all);
   }
 
   async function updateType(id, field, value) {
