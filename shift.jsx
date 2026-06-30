@@ -779,6 +779,7 @@ function ShiftMasterSection({ officeId, onClose }) {
   const [localTypes, setLocalTypes] = useStateS([]);
   const [dirty,  setDirty]  = useStateS(false);
   const [saving, setSaving] = useStateS(false);
+  const [colorOpenId, setColorOpenId] = useStateS(null);
 
   // グローバル shiftTypes が変わったらローカルに同期
   useEffectS(() => {
@@ -917,15 +918,21 @@ function ShiftMasterSection({ officeId, onClose }) {
                   </td>
                   <td className="mono" style={{ fontSize: 12 }}>{calcWork(t)}</td>
                   <td>
-                    <div className="color-cell">
-                      {['#fca5a5','#fda4af','#93c5fd','#6ee7b7','#bbf7d0','#d8b4fe'].map(c => (
-                        <button key={c} onClick={() => handleChange(t.id, 'color', c)}
-                          style={{ width:20, height:20, borderRadius:'50%', background:c, border: t.color===c ? '2px solid #334155' : '2px solid transparent', cursor:'pointer', padding:0, marginRight:2 }} />
-                      ))}
-                      <input type="color" value={t.color}
-                        onChange={e => handleChange(t.id, 'color', e.target.value)}
-                        title="詳細カラー設定"
-                        style={{ width:20, height:20, padding:0, border:'none', borderRadius:'50%', cursor:'pointer', verticalAlign:'middle' }} />
+                    <div style={{ position:'relative' }}>
+                      <button onClick={() => setColorOpenId(colorOpenId === t.id ? null : t.id)}
+                        style={{ width:28, height:28, borderRadius:6, background:t.color||'#e2e8f0', border:'1px solid #cbd5e1', cursor:'pointer', padding:0, display:'block' }} />
+                      {colorOpenId === t.id && (
+                        <div style={{ position:'absolute', zIndex:200, background:'#fff', border:'1px solid #e2e8f0', borderRadius:8, padding:'8px 10px', boxShadow:'0 4px 16px rgba(0,0,0,.15)', display:'flex', gap:6, alignItems:'center', top:32, left:0 }}>
+                          {['#ef4444','#fda4af','#93c5fd','#6ee7b7','#bbf7d0','#d8b4fe'].map(c => (
+                            <button key={c} onClick={() => { handleChange(t.id, 'color', c); setColorOpenId(null); }}
+                              style={{ width:24, height:24, borderRadius:'50%', background:c, border: t.color===c ? '2px solid #334155' : '2px solid transparent', cursor:'pointer', padding:0 }} />
+                          ))}
+                          <input type="color" value={t.color||'#ffffff'}
+                            onChange={e => handleChange(t.id, 'color', e.target.value)}
+                            title="詳細カラー設定"
+                            style={{ width:24, height:24, padding:0, border:'1px solid #e2e8f0', borderRadius:'50%', cursor:'pointer' }} />
+                        </div>
+                      )}
                     </div>
                   </td>
                   <td>
