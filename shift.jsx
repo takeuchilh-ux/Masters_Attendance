@@ -922,7 +922,7 @@ function ShiftMasterSection({ officeId, onClose }) {
                       <button onClick={() => setColorOpenId(colorOpenId === t.id ? null : t.id)}
                         style={{ width:28, height:28, borderRadius:6, background:t.color||'#e2e8f0', border:'1px solid #cbd5e1', cursor:'pointer', padding:0, display:'block' }} />
                       {colorOpenId === t.id && (
-                        <div style={{ position:'absolute', zIndex:200, background:'#fff', border:'1px solid #e2e8f0', borderRadius:8, padding:'8px 10px', boxShadow:'0 4px 16px rgba(0,0,0,.15)', display:'flex', gap:6, alignItems:'center', top:32, left:0 }}>
+                        <div style={{ position:'absolute', zIndex:200, background:'#fff', border:'1px solid #e2e8f0', borderRadius:8, padding:'8px 10px', boxShadow:'0 4px 16px rgba(0,0,0,.15)', display:'flex', gap:6, alignItems:'center', top:32, right:0 }}>
                           {['#ef4444','#fda4af','#93c5fd','#6ee7b7','#bbf7d0','#d8b4fe'].map(c => (
                             <button key={c} onClick={() => { handleChange(t.id, 'color', c); setColorOpenId(null); }}
                               style={{ width:24, height:24, borderRadius:'50%', background:c, border: t.color===c ? '2px solid #334155' : '2px solid transparent', cursor:'pointer', padding:0 }} />
