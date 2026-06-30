@@ -47,6 +47,7 @@ function ShiftPage({ auth }) {
   const [masterOpen, setMasterOpen] = useStateS(false);
   const [duties, setDuties] = useStateS({}); // key: officeId|date|dutyType → staffId
   const [dutyEditing, setDutyEditing] = useStateS(null); // { officeId, date, dutyType }
+  const [touchMap, setTouchMap] = useStateS({}); // key: staffId|date → { in: bool, out: bool }
 
   // 11日〜翌月10日の期間計算
   const periodStart = useMemoS(() => {
@@ -77,14 +78,22 @@ function ShiftPage({ auth }) {
     }
   }, [officeId]);
 
-  // 選択期間（11日〜翌月10日）のシフトと日直割り当てを取得
+  // 選択期間（11日〜翌月10日）のシフトと日直割り当て・打刻を取得
   useEffectS(() => {
     if (!officeId) return;
     setLoadingShifts(true);
+    const today = localISO(new Date());
+    const touchEnd = today < periodEnd ? today : periodEnd;
+    const fetchTouch = periodStart <= today
+      ? mdb('touch_logs').select('staff_id, touched_at, touch_type')
+          .gte('touched_at', `${periodStart}T00:00:00`)
+          .lte('touched_at', `${touchEnd}T23:59:59`)
+      : Promise.resolve({ data: [] });
     Promise.all([
       mdb('shifts').select('*').gte('date', periodStart).lte('date', periodEnd),
       mdb('duty_assignments').select('*').gte('date', periodStart).lte('date', periodEnd),
-    ]).then(([sRes, dRes]) => {
+      fetchTouch,
+    ]).then(([sRes, dRes, tRes]) => {
       const map = {};
       (sRes.data || []).forEach(s => {
         map[`${s.staff_id}|${s.date}|${s.section||''}`] = {
@@ -100,6 +109,15 @@ function ShiftPage({ auth }) {
       const dmap = {};
       (dRes.data || []).forEach(d => { dmap[`${d.office_id}|${d.date}|${d.duty_type}`] = { staffId: d.staff_id, dbId: d.id }; });
       setDuties(dmap);
+      const tmap = {};
+      (tRes.data || []).forEach(t => {
+        const date = t.touched_at.slice(0, 10);
+        const key = `${t.staff_id}|${date}`;
+        if (!tmap[key]) tmap[key] = { in: false, out: false };
+        if (t.touch_type === 'in')  tmap[key].in  = true;
+        if (t.touch_type === 'out') tmap[key].out = true;
+      });
+      setTouchMap(tmap);
       setLoadingShifts(false);
     });
   }, [officeId, year, month, periodStart, periodEnd]);
@@ -255,6 +273,8 @@ function ShiftPage({ auth }) {
             onCellClick={(staffId, iso, staffOfficeId, section) => setEditing({ staffId, date: iso, officeId: staffOfficeId, section })}
             onDutyClick={(offId, iso, dutyType) => setDutyEditing({ officeId: offId, date: iso, dutyType })}
             allStaff={officeStaff}
+            touchMap={touchMap}
+            today={localISO(new Date())}
           />
         )}
 
@@ -280,6 +300,8 @@ function ShiftPage({ auth }) {
                   onCellClick={(staffId, iso, staffOfficeId, section) => setEditing({ staffId, date: iso, officeId: staffOfficeId, section })}
                   onDutyClick={(offId, iso, dutyType) => setDutyEditing({ officeId: offId, date: iso, dutyType })}
                   allStaff={staffForOffice}
+                  touchMap={touchMap}
+                  today={localISO(new Date())}
                 />
               </div>
             );
@@ -373,7 +395,7 @@ function ShiftSectionHeader({ label, color, bg, days }) {
   );
 }
 
-function ShiftMonthMatrix({ staff, master, shifts, days, duties, showDuty, dutyOfficeId, onCellClick, onDutyClick, allStaff }) {
+function ShiftMonthMatrix({ staff, master, shifts, days, duties, showDuty, dutyOfficeId, onCellClick, onDutyClick, allStaff, touchMap = {}, today = '' }) {
   const sortByPos = (arr) => [...arr].sort((a, b) => posOrder(a.position) - posOrder(b.position));
   const hasCategories = staff.some(s => s.duty_category);
   const nikkiStaff = hasCategories ? sortByPos(staff.filter(s => s.duty_category === '日直' || s.duty_category === '両方')) : [];
@@ -421,6 +443,8 @@ function ShiftMonthMatrix({ staff, master, shifts, days, duties, showDuty, dutyO
           if (sm?.label === '公休') kyukeiCnt++;
           if (sm?.label === '有給') yukyuCnt++;
           if (sm?.label === '休')   kyuCnt++;
+          const isPast = today && d.iso <= today;
+          const punch  = isPast ? (touchMap[`${s.id}|${d.iso}`] || null) : null;
           return (
             <td key={d.n} className={`shift-cell ${d.dow===0?'sun':d.dow===6?'sat':''}`}
               onClick={() => onCellClick(s.id, d.iso, s.office_id, sec)}>
@@ -429,6 +453,13 @@ function ShiftMonthMatrix({ staff, master, shifts, days, duties, showDuty, dutyO
                   <div className="lbl">{sm.label}</div>
                   {start && <div className="time mono">{fmtShort(start)}〜{fmtShort(end)}</div>}
                   {sh?.notes && <div className="lbl" style={{ fontSize:9, opacity:.8, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>{sh.notes.length>6?sh.notes.slice(0,6)+'…':sh.notes}</div>}
+                  {punch !== null && (
+                    <div style={{ fontSize:9, lineHeight:1.4, marginTop:1 }}>
+                      <span>出勤</span><span style={{ marginLeft:2 }}>{punch.in  ? '🟢' : '🔴'}</span>
+                      {'　'}
+                      <span>退勤</span><span style={{ marginLeft:2 }}>{punch.out ? '🟢' : '🔴'}</span>
+                    </div>
+                  )}
                 </div>
               )}
             </td>
