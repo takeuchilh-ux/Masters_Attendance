@@ -975,4 +975,4 @@ function DutyEditModal({ dutyType, date, officeId, staff, currentStaffId, onClos
   );
 }
 
-Object.assign(window, { ShiftPage, ShiftMonthMatrix, ShiftEditModal, fmtTime, POSITION_ORDER, posOrder });
+Object.assign(window, { ShiftPage, ShiftMonthMatrix, fmtTime, POSITION_ORDER, posOrder });
