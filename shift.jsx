@@ -918,9 +918,14 @@ function ShiftMasterSection({ officeId, onClose }) {
                   <td className="mono" style={{ fontSize: 12 }}>{calcWork(t)}</td>
                   <td>
                     <div className="color-cell">
+                      {['#fca5a5','#fda4af','#93c5fd','#6ee7b7','#bbf7d0','#d8b4fe'].map(c => (
+                        <button key={c} onClick={() => handleChange(t.id, 'color', c)}
+                          style={{ width:20, height:20, borderRadius:'50%', background:c, border: t.color===c ? '2px solid #334155' : '2px solid transparent', cursor:'pointer', padding:0, marginRight:2 }} />
+                      ))}
                       <input type="color" value={t.color}
-                        onChange={e => handleChange(t.id, 'color', e.target.value)} />
-                      <span className="mono small">{t.color}</span>
+                        onChange={e => handleChange(t.id, 'color', e.target.value)}
+                        title="詳細カラー設定"
+                        style={{ width:20, height:20, padding:0, border:'none', borderRadius:'50%', cursor:'pointer', verticalAlign:'middle' }} />
                     </div>
                   </td>
                   <td>
